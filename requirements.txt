@@ -1,0 +1,16 @@
+# Core ML
+torch>=2.0.0
+transformers>=4.40.0
+accelerate>=0.28.0
+sentencepiece>=0.1.99
+
+# Fine-tuning
+peft>=0.8.0
+trl>=0.8.0
+datasets>=2.18.0
+
+# Existing project deps
+numpy>=1.24.0
+opencv-python>=4.8.0
+ultralytics>=8.0.0
+Pillow>=10.0.0

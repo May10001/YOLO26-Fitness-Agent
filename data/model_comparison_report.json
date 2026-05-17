@@ -1,0 +1,227 @@
+[
+  {
+    "name": "Qwen2.5-0.5B-Instruct",
+    "hf_id": "Qwen/Qwen2.5-0.5B-Instruct",
+    "params_b": 0.5,
+    "architecture": "Qwen2.5 (decoder-only)",
+    "context_len": 32768,
+    "vram": {
+      "fp16": 1.0,
+      "int8": 0.5,
+      "int4": 0.3
+    },
+    "benchmarks": {
+      "ceval": 52.3,
+      "cmmlu": 49.7,
+      "humaneval_cn": 28.0
+    },
+    "speed": {
+      "rtx4060": 85.0,
+      "rtx4090": 140.0
+    },
+    "lora_vram_gb": 2.5,
+    "pros": [
+      "极低 VRAM，适合边缘设备部署",
+      "推理速度快，适合实时纠错场景",
+      "已在项目中集成，开发成本最低"
+    ],
+    "cons": [
+      "基础能力有限，复杂推理较弱",
+      "中文知识覆盖不如大模型全面",
+      "专业健身知识需要大量微调弥补"
+    ],
+    "fitness_score": 7.9
+  },
+  {
+    "name": "Qwen2.5-1.5B-Instruct",
+    "hf_id": "Qwen/Qwen2.5-1.5B-Instruct",
+    "params_b": 1.5,
+    "architecture": "Qwen2.5 (decoder-only)",
+    "context_len": 32768,
+    "vram": {
+      "fp16": 3.0,
+      "int8": 1.5,
+      "int4": 0.9
+    },
+    "benchmarks": {
+      "ceval": 64.8,
+      "cmmlu": 62.1,
+      "humaneval_cn": 42.0
+    },
+    "speed": {
+      "rtx4060": 55.0,
+      "rtx4090": 95.0
+    },
+    "lora_vram_gb": 5.0,
+    "pros": [
+      "VRAM 仍可接受，消费级 GPU 可微调",
+      "中文能力较 0.5B 有明显提升",
+      "推理速度尚可满足实时场景"
+    ],
+    "cons": [
+      "1.5B 对复杂规划类任务仍显不足",
+      "需要一定量的高质量微调数据"
+    ],
+    "fitness_score": 7.1
+  },
+  {
+    "name": "Qwen2.5-3B-Instruct",
+    "hf_id": "Qwen/Qwen2.5-3B-Instruct",
+    "params_b": 3.0,
+    "architecture": "Qwen2.5 (decoder-only)",
+    "context_len": 32768,
+    "vram": {
+      "fp16": 6.0,
+      "int8": 3.2,
+      "int4": 1.8
+    },
+    "benchmarks": {
+      "ceval": 74.5,
+      "cmmlu": 72.0,
+      "humaneval_cn": 55.0
+    },
+    "speed": {
+      "rtx4060": 32.0,
+      "rtx4090": 68.0
+    },
+    "lora_vram_gb": 8.0,
+    "pros": [
+      "VRAM 与性能的最佳甜点",
+      "消费级 GPU (RTX 4060 8GB) 可微调",
+      "中文能力已足够健身领域应用"
+    ],
+    "cons": [
+      "3B 规模对于专业运动解剖学仍有局限"
+    ],
+    "fitness_score": 6.1
+  },
+  {
+    "name": "Qwen2.5-7B-Instruct",
+    "hf_id": "Qwen/Qwen2.5-7B-Instruct",
+    "params_b": 7.0,
+    "architecture": "Qwen2.5 (decoder-only)",
+    "context_len": 131072,
+    "vram": {
+      "fp16": 14.0,
+      "int8": 7.5,
+      "int4": 4.5
+    },
+    "benchmarks": {
+      "ceval": 82.3,
+      "cmmlu": 80.5,
+      "humaneval_cn": 68.5
+    },
+    "speed": {
+      "rtx4060": 15.0,
+      "rtx4090": 40.0
+    },
+    "lora_vram_gb": 16.0,
+    "pros": [
+      "中文综合能力优秀，C-Eval 80+",
+      "长上下文支持 131K，可处理完整训练日志",
+      "健身知识基底较好，微调数据需求少"
+    ],
+    "cons": [
+      "FP16 需 14GB VRAM，需 RTX 4080+",
+      "推理速度不适合实时逐帧纠错",
+      "LoRA 微调也需要 16GB+ VRAM"
+    ],
+    "fitness_score": 4.6
+  },
+  {
+    "name": "InternLM2-7B",
+    "hf_id": "internlm/internlm2-7b",
+    "params_b": 7.0,
+    "architecture": "InternLM2 (decoder-only)",
+    "context_len": 200000,
+    "vram": {
+      "fp16": 14.0,
+      "int8": 7.5,
+      "int4": 4.5
+    },
+    "benchmarks": {
+      "ceval": 81.0,
+      "cmmlu": 78.8,
+      "humaneval_cn": 65.0
+    },
+    "speed": {
+      "rtx4060": 14.0,
+      "rtx4090": 38.0
+    },
+    "lora_vram_gb": 16.0,
+    "pros": [
+      "超长上下文 200K，可处理全年训练日志",
+      "中文能力与 Qwen2.5-7B 相当",
+      "工具调用能力优秀"
+    ],
+    "cons": [
+      "VRAM 要求高",
+      "社区相比 Qwen 稍小"
+    ],
+    "fitness_score": 4.5
+  },
+  {
+    "name": "ChatGLM3-6B",
+    "hf_id": "THUDM/chatglm3-6b",
+    "params_b": 6.0,
+    "architecture": "ChatGLM (prefix-decoder)",
+    "context_len": 8192,
+    "vram": {
+      "fp16": 13.0,
+      "int8": 7.0,
+      "int4": 4.0
+    },
+    "benchmarks": {
+      "ceval": 79.5,
+      "cmmlu": 77.2,
+      "humaneval_cn": 55.0
+    },
+    "speed": {
+      "rtx4060": 12.0,
+      "rtx4090": 35.0
+    },
+    "lora_vram_gb": 15.0,
+    "pros": [
+      "中文生态完善，社区活跃",
+      "对话能力出色，适合健身问答",
+      "有丰富的健身领域插件和工具"
+    ],
+    "cons": [
+      "上下文仅有 8K，不足以处理长训练日志",
+      "架构非标准 decoder-only，工具链兼容性略差"
+    ],
+    "fitness_score": 3.4
+  },
+  {
+    "name": "Baichuan2-7B-Chat",
+    "hf_id": "baichuan-inc/Baichuan2-7B-Chat",
+    "params_b": 7.0,
+    "architecture": "Baichuan2 (decoder-only)",
+    "context_len": 4096,
+    "vram": {
+      "fp16": 14.0,
+      "int8": 7.5,
+      "int4": 4.5
+    },
+    "benchmarks": {
+      "ceval": 74.0,
+      "cmmlu": 71.5,
+      "humaneval_cn": 35.0
+    },
+    "speed": {
+      "rtx4060": 13.0,
+      "rtx4090": 36.0
+    },
+    "lora_vram_gb": 16.0,
+    "pros": [
+      "中文医疗/健康预训练数据丰富",
+      "中文对话流畅自然"
+    ],
+    "cons": [
+      "上下文仅 4K，严重不足",
+      "社区活跃度下降，更新缓慢",
+      "基准测试落后于同期模型"
+    ],
+    "fitness_score": 3.0
+  }
+]

@@ -1,6 +1,7 @@
 import argparse
 import math
-import sys
+import os
+import threading
 import time
 import tkinter as tk
 from dataclasses import dataclass
@@ -11,8 +12,15 @@ import numpy as np
 from PIL import Image, ImageTk
 from ultralytics import YOLO
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from code.pose_analyzer import PoseAnalyzer, EXERCISE_STANDARDS
+try:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    _transformers_available = True
+except ImportError:
+    _transformers_available = False
+    torch = None
+    AutoModelForCausalLM = None
+    AutoTokenizer = None
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -84,6 +92,29 @@ SIDE_KEYPOINTS = {
         "hip": (6, 12, 14),
     },
 }
+
+FITNESS_SYSTEM_PROMPT = (
+    "你是一个专业的AI健身助手教练，拥有运动科学、运动解剖学和营养学背景。"
+    "你的核心职责：\n"
+    "1. 根据用户正在进行的健身动作（深蹲、俯卧撑、仰卧起坐、弓步、哑铃弯举、开合跳），"
+    "提供专业的动作要领指导、常见错误姿势纠正和呼吸节奏建议。\n"
+    "2. 解答关于力量训练、有氧运动、增肌减脂、营养饮食、运动恢复等健身相关问题。\n"
+    "3. 根据用户的训练目标和当前水平，给出个性化的训练计划建议。\n"
+    "4. 用积极鼓励的语气帮助用户建立健身信心，同时提醒运动安全注意事项。\n"
+    "5. 如果用户询问与健身运动完全无关的话题，请委婉引导回健身领域。\n\n"
+    "回复风格：简洁专业、亲切友好、富有鼓励性。每次回复控制在3-5句话，"
+    "必要时可分点说明。使用用户提问的语言进行回复。"
+)
+
+CHAT_WELCOME_MESSAGE = (
+    "🏋️ 你好！我是你的AI健身助手，基于本地 Qwen2.5。\n"
+    "我可以帮你：\n"
+    "  • 指导动作要领，纠正错误姿势\n"
+    "  • 制定个性化训练计划\n"
+    "  • 解答增肌、减脂、营养等问题\n"
+    "  • 在你运动时提供实时建议\n\n"
+    "请在下方输入你的问题，开始我们的健身之旅吧！"
+)
 
 
 @dataclass(frozen=True)
@@ -279,8 +310,8 @@ class WorkoutMonitoringApp:
     def __init__(self, root):
         self.root = root
         self.root.title("健身动作识别计数系统")
-        self.root.geometry("1180x760")
-        self.root.minsize(980, 640)
+        self.root.geometry("1180x960")
+        self.root.minsize(980, 820)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
         self.model = None
@@ -288,7 +319,6 @@ class WorkoutMonitoringApp:
         self.running = False
         self.last_frame_time = time.time()
         self.fps = 0.0
-        self.analyzer = PoseAnalyzer("深蹲")
         self.counter = ExerciseCounter()
         self.photo = None
 
@@ -305,16 +335,15 @@ class WorkoutMonitoringApp:
         self.phase_text = tk.StringVar(value="等待")
         self.metric_text = tk.StringVar(value="-")
         self.fps_text = tk.StringVar(value="0.0")
-        self.score_text = tk.StringVar(value="--")
-        self.angle_score_text = tk.StringVar(value="--")
-        self.temporal_score_text = tk.StringVar(value="--")
-        self.symmetry_score_text = tk.StringVar(value="--")
-        self.hold_time_text = tk.StringVar(value="0.0s")
-        self.errors_text = tk.StringVar(value="")
+
+        self.chat_client = None
+        self.chat_initialized = False
+        self.chat_processing = False
 
         self._setup_style()
         self._build_layout()
         self._on_exercise_change()
+        self._init_chat_client()
 
     def _setup_style(self):
         style = ttk.Style()
@@ -334,7 +363,10 @@ class WorkoutMonitoringApp:
         main = ttk.Frame(self.root, padding=12)
         main.pack(fill=tk.BOTH, expand=True)
 
-        video_panel = ttk.Frame(main)
+        top_frame = ttk.Frame(main)
+        top_frame.pack(fill=tk.BOTH, expand=True)
+
+        video_panel = ttk.Frame(top_frame)
         video_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         self.video_label = tk.Label(
@@ -350,7 +382,7 @@ class WorkoutMonitoringApp:
         status = ttk.Label(video_panel, textvariable=self.status_text, anchor="w")
         status.pack(fill=tk.X, pady=(8, 0))
 
-        control = ttk.Frame(main, style="Panel.TFrame", padding=16)
+        control = ttk.Frame(top_frame, style="Panel.TFrame", padding=16)
         control.pack(side=tk.RIGHT, fill=tk.Y, padx=(12, 0))
         control.configure(width=330)
         control.pack_propagate(False)
@@ -367,43 +399,13 @@ class WorkoutMonitoringApp:
         self._metric_card(metric_grid, "角度/状态", self.metric_text, "Panel.TLabel", 1, 0)
         self._metric_card(metric_grid, "FPS", self.fps_text, "Panel.TLabel", 1, 1)
 
-        ttk.Separator(control).pack(fill=tk.X, pady=10)
-
-        # 评分区域
-        ttk.Label(control, text="动作评分 (0-100)", style="Panel.TLabel",
-                  font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
-        score_row = ttk.Frame(control, style="Panel.TFrame")
-        score_row.pack(fill=tk.X, pady=(4, 0))
-        ttk.Label(score_row, textvariable=self.score_text,
-                  font=("Microsoft YaHei UI", 28, "bold"),
-                  foreground="#0f766e", background="#ffffff").pack(side=tk.LEFT)
-        ttk.Label(score_row, text=" 分", style="Panel.TLabel").pack(side=tk.LEFT)
-
-        score_grid = ttk.Frame(control, style="Panel.TFrame")
-        score_grid.pack(fill=tk.X, pady=(4, 0))
-        self._metric_card(score_grid, "关节角度", self.angle_score_text, "Panel.TLabel", 0, 0)
-        self._metric_card(score_grid, "时序", self.temporal_score_text, "Panel.TLabel", 0, 1)
-        self._metric_card(score_grid, "对称性", self.symmetry_score_text, "Panel.TLabel", 1, 0)
-        self._metric_card(score_grid, "保持时间", self.hold_time_text, "Panel.TLabel", 1, 1)
-
-        ttk.Separator(control).pack(fill=tk.X, pady=10)
-
-        # 错误提示区域
-        ttk.Label(control, text="动作纠错", style="Panel.TLabel",
-                  font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
-        self.errors_label = ttk.Label(control, textvariable=self.errors_text,
-                                       style="Panel.TLabel", wraplength=290,
-                                       foreground="#dc2626", justify=tk.LEFT)
-        self.errors_label.pack(fill=tk.X, pady=(4, 0))
-
-        ttk.Separator(control).pack(fill=tk.X, pady=10)
+        ttk.Separator(control).pack(fill=tk.X, pady=16)
 
         ttk.Label(control, text="动作类型", style="Panel.TLabel").pack(anchor="w")
-        all_exercises = list(dict.fromkeys(list(EXERCISE_STANDARDS.keys()) + list(EXERCISES.keys())))
         exercise_box = ttk.Combobox(
             control,
             textvariable=self.exercise_name,
-            values=all_exercises,
+            values=list(EXERCISES.keys()),
             state="readonly",
         )
         exercise_box.pack(fill=tk.X, pady=(4, 10))
@@ -456,6 +458,106 @@ class WorkoutMonitoringApp:
         hint.pack(side=tk.BOTTOM, fill=tk.X, pady=(18, 0))
         self.hint_label = hint
 
+        ttk.Separator(main).pack(fill=tk.X, pady=(8, 0))
+
+        chat_panel = tk.Frame(main, bg="#ffffff", highlightbackground="#d1d5db", highlightthickness=1)
+        chat_panel.pack(fill=tk.BOTH, expand=False, pady=(0, 0))
+
+        chat_header = tk.Frame(chat_panel, bg="#ffffff")
+        chat_header.pack(fill=tk.X, padx=12, pady=(10, 4))
+        tk.Label(chat_header, text="🤖 AI 健身助手", font=("Microsoft YaHei UI", 14, "bold"),
+                 bg="#ffffff", fg="#111827").pack(side=tk.LEFT)
+        self.chat_status_label = tk.Label(
+            chat_header, text="", font=("Microsoft YaHei UI", 10),
+            bg="#ffffff", fg="#6b7280"
+        )
+        self.chat_status_label.pack(side=tk.RIGHT)
+
+        display_frame = tk.Frame(chat_panel, bg="#ffffff")
+        display_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(2, 0))
+
+        self.chat_display = tk.Text(
+            display_frame,
+            font=("Microsoft YaHei UI", 10),
+            bg="#f3f4f6",
+            fg="#111827",
+            wrap=tk.WORD,
+            height=5,
+            padx=8,
+            pady=6,
+            relief=tk.FLAT,
+            borderwidth=0,
+            state=tk.DISABLED,
+        )
+        chat_scrollbar = tk.Scrollbar(display_frame, orient=tk.VERTICAL, command=self.chat_display.yview)
+        self.chat_display.configure(yscrollcommand=chat_scrollbar.set)
+        self.chat_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        chat_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.chat_display.tag_configure(
+            "user",
+            foreground="#0f766e",
+            font=("Microsoft YaHei UI", 10, "bold"),
+            lmargin1=40,
+            lmargin2=40,
+            spacing3=6,
+        )
+        self.chat_display.tag_configure(
+            "assistant",
+            foreground="#111827",
+            font=("Microsoft YaHei UI", 10),
+            lmargin1=10,
+            lmargin2=10,
+            spacing3=6,
+        )
+        self.chat_display.tag_configure(
+            "system_msg",
+            foreground="#6b7280",
+            font=("Microsoft YaHei UI", 9, "italic"),
+            lmargin1=10,
+            lmargin2=10,
+            spacing3=4,
+        )
+
+        input_row = tk.Frame(chat_panel, bg="#ffffff")
+        input_row.pack(fill=tk.X, padx=12, pady=(6, 12))
+
+        self.chat_input = tk.Text(
+            input_row,
+            font=("Microsoft YaHei UI", 11),
+            bg="white",
+            fg="black",
+            insertbackground="black",
+            relief=tk.SOLID,
+            borderwidth=2,
+            height=2,
+            padx=8,
+            pady=4,
+            wrap=tk.WORD,
+        )
+        self.chat_input.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.chat_input.bind("<Return>", self._on_chat_enter)
+        self.chat_input.bind("<Shift-Return>", lambda e: None)
+        self.chat_input.bind("<KeyRelease>", self._on_input_change)
+
+        self.send_button = tk.Button(
+            input_row,
+            text="发送",
+            font=("Microsoft YaHei UI", 11, "bold"),
+            bg="#0f766e",
+            fg="white",
+            activebackground="#0d6b63",
+            activeforeground="white",
+            relief=tk.FLAT,
+            padx=18,
+            pady=6,
+            command=self._send_chat_message,
+        )
+        self.send_button.pack(side=tk.RIGHT, padx=(8, 0))
+
+        self._append_chat_message("system_msg", CHAT_WELCOME_MESSAGE)
+        self.root.after(200, lambda: self.chat_input.focus_set())
+
     def _metric_card(self, parent, title, value_var, value_style, row, column):
         card = ttk.Frame(parent, style="Panel.TFrame", padding=8)
         card.grid(row=row, column=column, sticky="nsew", padx=4, pady=4)
@@ -474,24 +576,11 @@ class WorkoutMonitoringApp:
             self.status_text.set("模型路径已更新，启动时会重新加载")
 
     def _on_exercise_change(self):
-        exercise = self.exercise_name.get()
         self.reset_count()
-        if exercise in EXERCISE_STANDARDS:
-            self.analyzer = PoseAnalyzer(exercise)
-        else:
-            self.analyzer = None
-        if exercise in EXERCISES:
-            config = EXERCISES[exercise]
-            self.hint_label.configure(
-                text=f"{config.label}：{config.hint}。请让身体尽量完整进入画面，系统会优先跟踪画面中最大的人体。"
-            )
-        elif exercise in EXERCISE_STANDARDS:
-            std = EXERCISE_STANDARDS[exercise]
-            self.hint_label.configure(
-                text=f"{std.name}：主监测 {std.primary_joint}。请让身体尽量完整进入画面。"
-            )
-        else:
-            self.hint_label.configure(text="")
+        config = EXERCISES[self.exercise_name.get()]
+        self.hint_label.configure(
+            text=f"{config.label}：{config.hint}。请让身体尽量完整进入画面，系统会优先跟踪画面中最大的人体。"
+        )
 
     def start(self):
         if self.running:
@@ -532,18 +621,10 @@ class WorkoutMonitoringApp:
         self.status_text.set("已停止")
 
     def reset_count(self):
-        if self.analyzer is not None:
-            self.analyzer.reset()
         self.counter.reset()
         self.count_text.set("0")
         self.phase_text.set("等待")
         self.metric_text.set("-")
-        self.score_text.set("--")
-        self.angle_score_text.set("--")
-        self.temporal_score_text.set("--")
-        self.symmetry_score_text.set("--")
-        self.hold_time_text.set("0.0s")
-        self.errors_text.set("")
 
     def close(self):
         self.stop()
@@ -584,48 +665,18 @@ class WorkoutMonitoringApp:
             self.status_text.set("未检测到人体")
             return frame
 
-        exercise = self.exercise_name.get()
-        if self.analyzer is not None:
-            analysis = self.analyzer.analyze_frame(keypoints, confidences)
-            count = analysis.count
-            phase = analysis.phase
-            metric = analysis.angles.primary_angle(exercise)
-            self.count_text.set(str(count))
-            self.phase_text.set(phase)
-            self.metric_text.set(self._format_metric(metric, exercise))
-            self.score_text.set(f"{analysis.score.total:.0f}")
-            self.angle_score_text.set(f"{analysis.score.angle_score:.0f}/40")
-            self.temporal_score_text.set(f"{analysis.score.temporal_score:.0f}/30")
-            self.symmetry_score_text.set(f"{analysis.score.symmetry_score:.0f}/30")
-            self.hold_time_text.set(f"{analysis.hold_time:.1f}s")
-            if analysis.errors:
-                err_msgs = [f"! {e.name}: {e.suggestion}" for e in analysis.errors]
-                self.errors_text.set("\n".join(err_msgs))
-                self.errors_label.configure(foreground="#dc2626")
-            else:
-                self.errors_text.set("无错误，动作标准")
-                self.errors_label.configure(foreground="#16a34a")
-            self.status_text.set("检测中：姿态分析引擎运行中")
-        else:
-            # 回退到旧版计数逻辑
-            count, phase, metric = self.counter.update(
-                exercise, keypoints, confidences, self.side_name.get()
-            )
-            self.count_text.set(str(count))
-            self.phase_text.set(phase)
-            self.metric_text.set(self._format_metric(metric, exercise))
-            self.score_text.set("--")
-            self.angle_score_text.set("--")
-            self.temporal_score_text.set("--")
-            self.symmetry_score_text.set("--")
-            self.hold_time_text.set("--")
-            self.errors_text.set("")
-            self.status_text.set("检测中：已识别人体关键点")
+        count, phase, metric = self.counter.update(
+            self.exercise_name.get(), keypoints, confidences, self.side_name.get()
+        )
+        self.count_text.set(str(count))
+        self.phase_text.set(phase)
+        self.metric_text.set(self._format_metric(metric))
+        self.status_text.set("检测中：已识别人体关键点")
 
         if self.show_skeleton.get():
             self._draw_skeleton(frame, keypoints, confidences)
         self._draw_keypoints(frame, keypoints, confidences)
-        self._draw_overlay(frame, count, phase, metric, exercise)
+        self._draw_overlay(frame, count, phase, metric)
         return frame
 
     def _select_person(self, result):
@@ -698,19 +749,14 @@ class WorkoutMonitoringApp:
                     cv2.LINE_AA,
                 )
 
-    def _draw_overlay(self, frame, count, phase, metric, exercise):
-        metric_text = self._format_metric_ascii(metric, exercise)
-        exercise_en = EXERCISE_ENGLISH_NAMES.get(exercise, exercise)
-        phase_en = PHASE_ENGLISH_NAMES.get(phase, phase)
+    def _draw_overlay(self, frame, count, phase, metric):
+        metric_text = self._format_metric_ascii(metric)
         lines = [
-            f"Action: {exercise_en}",
+            f"Action: {EXERCISE_ENGLISH_NAMES[self.exercise_name.get()]}",
             f"Count: {count}",
-            f"Phase: {phase_en}",
+            f"Phase: {PHASE_ENGLISH_NAMES.get(phase, phase)}",
             f"Metric: {metric_text}",
         ]
-        # 如果有评分数据显示
-        if self.analyzer is not None:
-            lines.append(f"Score: {self.score_text.get()}")
         x, y = 18, 28
         box_h = 34 * len(lines) + 18
         cv2.rectangle(frame, (10, 10), (300, box_h), (15, 23, 42), -1)
@@ -719,28 +765,20 @@ class WorkoutMonitoringApp:
             cv2.putText(frame, line, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.68, (255, 255, 255), 2)
             y += 34
 
-    def _format_metric(self, metric, exercise=None):
+    def _format_metric(self, metric):
         if metric is None:
             return "-"
-        if exercise is None:
-            exercise = self.exercise_name.get()
-        if exercise in EXERCISES:
-            config = EXERCISES[exercise]
-            if config.unit == "state":
-                return "打开" if metric > 0.5 else "闭合"
+        config = EXERCISES[self.exercise_name.get()]
+        if config.unit == "state":
+            return "打开" if metric > 0.5 else "闭合"
         return f"{metric:.0f}°"
 
-    def _format_metric_ascii(self, metric, exercise=None):
+    def _format_metric_ascii(self, metric):
         if metric is None:
             return "-"
-        if exercise is None:
-            exercise = self.exercise_name.get()
-        if exercise in EXERCISES:
-            config = EXERCISES[exercise]
-            if config.unit == "state":
-                return "open" if metric > 0.5 else "closed"
-        if exercise == "开合跳":
-            return "open" if (metric or 0) > 0.5 else "closed"
+        config = EXERCISES[self.exercise_name.get()]
+        if config.unit == "state":
+            return "open" if metric > 0.5 else "closed"
         return f"{metric:.0f} deg"
 
     def _show_frame(self, frame):
@@ -753,6 +791,140 @@ class WorkoutMonitoringApp:
 
         self.photo = ImageTk.PhotoImage(image=image)
         self.video_label.configure(image=self.photo, text="")
+
+    def _init_chat_client(self):
+        if not _transformers_available:
+            self._append_chat_message(
+                "system_msg",
+                "⚠️ 未安装 transformers 库，AI助手不可用。请运行: pip install transformers torch"
+            )
+            self.chat_status_label.configure(text="🔒 未安装 transformers")
+            return
+
+        model_dir = BASE_DIR / "models" / "Qwen" / "Qwen2.5-0.5B-Instruct"
+        if not model_dir.exists():
+            self._append_chat_message(
+                "system_msg",
+                f"⚠️ 未找到本地 Qwen2.5 模型：{model_dir}"
+                "\n请确认模型已下载到正确路径。"
+            )
+            self.chat_status_label.configure(text="🔒 未找到模型")
+            return
+
+        try:
+            self.chat_status_label.configure(text="⏳ 加载模型中…")
+            self.root.update_idletasks()
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                str(model_dir), trust_remote_code=True
+            )
+            self.chat_model = AutoModelForCausalLM.from_pretrained(
+                str(model_dir),
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                device_map="auto",
+                trust_remote_code=True,
+            )
+            self.chat_initialized = True
+            device = "GPU" if torch.cuda.is_available() else "CPU"
+            self.chat_status_label.configure(text=f"✅ 就绪 ({device})")
+        except Exception as exc:
+            self._append_chat_message(
+                "system_msg",
+                f"⚠️ AI助手初始化失败: {exc}"
+            )
+            self.chat_status_label.configure(text="🔒 初始化失败")
+
+    def _append_chat_message(self, role, text):
+        self.chat_display.configure(state=tk.NORMAL)
+        if role == "user":
+            self.chat_display.insert(tk.END, f"🧑 你\n{text}\n\n", "user")
+        elif role == "assistant":
+            self.chat_display.insert(tk.END, f"🤖 助手\n{text}\n\n", "assistant")
+        else:
+            self.chat_display.insert(tk.END, f"{text}\n\n", "system_msg")
+        self.chat_display.configure(state=tk.DISABLED)
+        self.chat_display.see(tk.END)
+
+    def _on_input_change(self, event=None):
+        if self.chat_processing:
+            return "break"
+        text = self.chat_input.get("1.0", "end-1c").strip()
+        if text:
+            self.send_button.configure(state=tk.NORMAL)
+        else:
+            self.send_button.configure(state=tk.DISABLED)
+
+    def _on_chat_enter(self, event):
+        if (event.state & 0x1):
+            return None
+        self._send_chat_message()
+        return "break"
+
+    def _send_chat_message(self):
+        if self.chat_processing:
+            return
+
+        if not self.chat_initialized:
+            self._append_chat_message(
+                "system_msg",
+                "⚠️ AI助手未就绪，请确认本地 Qwen2.5 模型已正确加载。"
+            )
+            self.chat_input.delete("1.0", tk.END)
+            return
+
+        user_text = self.chat_input.get("1.0", "end-1c").strip()
+        if not user_text:
+            return
+
+        self.chat_input.delete("1.0", tk.END)
+        self.chat_input.configure(state=tk.DISABLED)
+        self.send_button.configure(state=tk.DISABLED, text="思考中…")
+        self.chat_processing = True
+        self.chat_status_label.configure(text="⏳ 回复中…")
+
+        self._append_chat_message("user", user_text)
+
+        threading.Thread(
+            target=self._call_chat_api,
+            args=(user_text,),
+            daemon=True,
+        ).start()
+
+    def _call_chat_api(self, user_message):
+        try:
+            messages = [
+                {"role": "system", "content": FITNESS_SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ]
+            text = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            inputs = self.tokenizer(text, return_tensors="pt").to(self.chat_model.device)
+            with torch.no_grad():
+                outputs = self.chat_model.generate(
+                    **inputs,
+                    max_new_tokens=800,
+                    temperature=0.7,
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                )
+            generated = outputs[0][inputs.input_ids.shape[1]:]
+            reply = self.tokenizer.decode(generated, skip_special_tokens=True)
+        except Exception as exc:
+            reply = f"抱歉，请求失败：{exc}\n请检查模型是否正确加载。"
+
+        self.root.after(0, self._on_chat_response, reply)
+
+    def _on_chat_response(self, reply):
+        self._append_chat_message("assistant", reply)
+        self.chat_input.configure(state=tk.NORMAL)
+        self.chat_input.focus_set()
+        self.send_button.configure(text="发送")
+        self._on_input_change()
+        self.chat_processing = False
+        device = "GPU" if torch.cuda.is_available() else "CPU"
+        self.chat_status_label.configure(text=f"✅ 就绪 ({device})")
 
 
 def run_self_test(model_path):

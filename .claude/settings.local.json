@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(python code/pose_analyzer.py)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('code/pose_analyzer.py', doraise=True\\); print\\('pose_analyzer.py: OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('workingout_monitoring.py'\\).read\\(\\)\\); print\\('workingout_monitoring.py: syntax OK'\\)\")"
+    ]
+  }
+}

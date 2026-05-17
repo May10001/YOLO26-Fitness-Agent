@@ -1,5 +1,6 @@
 import argparse
 import math
+import sys
 import time
 import tkinter as tk
 from dataclasses import dataclass
@@ -9,6 +10,9 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 from ultralytics import YOLO
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from code.pose_analyzer import PoseAnalyzer, EXERCISE_STANDARDS
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -284,6 +288,7 @@ class WorkoutMonitoringApp:
         self.running = False
         self.last_frame_time = time.time()
         self.fps = 0.0
+        self.analyzer = PoseAnalyzer("深蹲")
         self.counter = ExerciseCounter()
         self.photo = None
 
@@ -300,6 +305,12 @@ class WorkoutMonitoringApp:
         self.phase_text = tk.StringVar(value="等待")
         self.metric_text = tk.StringVar(value="-")
         self.fps_text = tk.StringVar(value="0.0")
+        self.score_text = tk.StringVar(value="--")
+        self.angle_score_text = tk.StringVar(value="--")
+        self.temporal_score_text = tk.StringVar(value="--")
+        self.symmetry_score_text = tk.StringVar(value="--")
+        self.hold_time_text = tk.StringVar(value="0.0s")
+        self.errors_text = tk.StringVar(value="")
 
         self._setup_style()
         self._build_layout()
@@ -356,13 +367,43 @@ class WorkoutMonitoringApp:
         self._metric_card(metric_grid, "角度/状态", self.metric_text, "Panel.TLabel", 1, 0)
         self._metric_card(metric_grid, "FPS", self.fps_text, "Panel.TLabel", 1, 1)
 
-        ttk.Separator(control).pack(fill=tk.X, pady=16)
+        ttk.Separator(control).pack(fill=tk.X, pady=10)
+
+        # 评分区域
+        ttk.Label(control, text="动作评分 (0-100)", style="Panel.TLabel",
+                  font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
+        score_row = ttk.Frame(control, style="Panel.TFrame")
+        score_row.pack(fill=tk.X, pady=(4, 0))
+        ttk.Label(score_row, textvariable=self.score_text,
+                  font=("Microsoft YaHei UI", 28, "bold"),
+                  foreground="#0f766e", background="#ffffff").pack(side=tk.LEFT)
+        ttk.Label(score_row, text=" 分", style="Panel.TLabel").pack(side=tk.LEFT)
+
+        score_grid = ttk.Frame(control, style="Panel.TFrame")
+        score_grid.pack(fill=tk.X, pady=(4, 0))
+        self._metric_card(score_grid, "关节角度", self.angle_score_text, "Panel.TLabel", 0, 0)
+        self._metric_card(score_grid, "时序", self.temporal_score_text, "Panel.TLabel", 0, 1)
+        self._metric_card(score_grid, "对称性", self.symmetry_score_text, "Panel.TLabel", 1, 0)
+        self._metric_card(score_grid, "保持时间", self.hold_time_text, "Panel.TLabel", 1, 1)
+
+        ttk.Separator(control).pack(fill=tk.X, pady=10)
+
+        # 错误提示区域
+        ttk.Label(control, text="动作纠错", style="Panel.TLabel",
+                  font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
+        self.errors_label = ttk.Label(control, textvariable=self.errors_text,
+                                       style="Panel.TLabel", wraplength=290,
+                                       foreground="#dc2626", justify=tk.LEFT)
+        self.errors_label.pack(fill=tk.X, pady=(4, 0))
+
+        ttk.Separator(control).pack(fill=tk.X, pady=10)
 
         ttk.Label(control, text="动作类型", style="Panel.TLabel").pack(anchor="w")
+        all_exercises = list(dict.fromkeys(list(EXERCISE_STANDARDS.keys()) + list(EXERCISES.keys())))
         exercise_box = ttk.Combobox(
             control,
             textvariable=self.exercise_name,
-            values=list(EXERCISES.keys()),
+            values=all_exercises,
             state="readonly",
         )
         exercise_box.pack(fill=tk.X, pady=(4, 10))
@@ -433,11 +474,24 @@ class WorkoutMonitoringApp:
             self.status_text.set("模型路径已更新，启动时会重新加载")
 
     def _on_exercise_change(self):
+        exercise = self.exercise_name.get()
         self.reset_count()
-        config = EXERCISES[self.exercise_name.get()]
-        self.hint_label.configure(
-            text=f"{config.label}：{config.hint}。请让身体尽量完整进入画面，系统会优先跟踪画面中最大的人体。"
-        )
+        if exercise in EXERCISE_STANDARDS:
+            self.analyzer = PoseAnalyzer(exercise)
+        else:
+            self.analyzer = None
+        if exercise in EXERCISES:
+            config = EXERCISES[exercise]
+            self.hint_label.configure(
+                text=f"{config.label}：{config.hint}。请让身体尽量完整进入画面，系统会优先跟踪画面中最大的人体。"
+            )
+        elif exercise in EXERCISE_STANDARDS:
+            std = EXERCISE_STANDARDS[exercise]
+            self.hint_label.configure(
+                text=f"{std.name}：主监测 {std.primary_joint}。请让身体尽量完整进入画面。"
+            )
+        else:
+            self.hint_label.configure(text="")
 
     def start(self):
         if self.running:
@@ -478,10 +532,18 @@ class WorkoutMonitoringApp:
         self.status_text.set("已停止")
 
     def reset_count(self):
+        if self.analyzer is not None:
+            self.analyzer.reset()
         self.counter.reset()
         self.count_text.set("0")
         self.phase_text.set("等待")
         self.metric_text.set("-")
+        self.score_text.set("--")
+        self.angle_score_text.set("--")
+        self.temporal_score_text.set("--")
+        self.symmetry_score_text.set("--")
+        self.hold_time_text.set("0.0s")
+        self.errors_text.set("")
 
     def close(self):
         self.stop()
@@ -522,18 +584,48 @@ class WorkoutMonitoringApp:
             self.status_text.set("未检测到人体")
             return frame
 
-        count, phase, metric = self.counter.update(
-            self.exercise_name.get(), keypoints, confidences, self.side_name.get()
-        )
-        self.count_text.set(str(count))
-        self.phase_text.set(phase)
-        self.metric_text.set(self._format_metric(metric))
-        self.status_text.set("检测中：已识别人体关键点")
+        exercise = self.exercise_name.get()
+        if self.analyzer is not None:
+            analysis = self.analyzer.analyze_frame(keypoints, confidences)
+            count = analysis.count
+            phase = analysis.phase
+            metric = analysis.angles.primary_angle(exercise)
+            self.count_text.set(str(count))
+            self.phase_text.set(phase)
+            self.metric_text.set(self._format_metric(metric, exercise))
+            self.score_text.set(f"{analysis.score.total:.0f}")
+            self.angle_score_text.set(f"{analysis.score.angle_score:.0f}/40")
+            self.temporal_score_text.set(f"{analysis.score.temporal_score:.0f}/30")
+            self.symmetry_score_text.set(f"{analysis.score.symmetry_score:.0f}/30")
+            self.hold_time_text.set(f"{analysis.hold_time:.1f}s")
+            if analysis.errors:
+                err_msgs = [f"! {e.name}: {e.suggestion}" for e in analysis.errors]
+                self.errors_text.set("\n".join(err_msgs))
+                self.errors_label.configure(foreground="#dc2626")
+            else:
+                self.errors_text.set("无错误，动作标准")
+                self.errors_label.configure(foreground="#16a34a")
+            self.status_text.set("检测中：姿态分析引擎运行中")
+        else:
+            # 回退到旧版计数逻辑
+            count, phase, metric = self.counter.update(
+                exercise, keypoints, confidences, self.side_name.get()
+            )
+            self.count_text.set(str(count))
+            self.phase_text.set(phase)
+            self.metric_text.set(self._format_metric(metric, exercise))
+            self.score_text.set("--")
+            self.angle_score_text.set("--")
+            self.temporal_score_text.set("--")
+            self.symmetry_score_text.set("--")
+            self.hold_time_text.set("--")
+            self.errors_text.set("")
+            self.status_text.set("检测中：已识别人体关键点")
 
         if self.show_skeleton.get():
             self._draw_skeleton(frame, keypoints, confidences)
         self._draw_keypoints(frame, keypoints, confidences)
-        self._draw_overlay(frame, count, phase, metric)
+        self._draw_overlay(frame, count, phase, metric, exercise)
         return frame
 
     def _select_person(self, result):
@@ -606,14 +698,19 @@ class WorkoutMonitoringApp:
                     cv2.LINE_AA,
                 )
 
-    def _draw_overlay(self, frame, count, phase, metric):
-        metric_text = self._format_metric_ascii(metric)
+    def _draw_overlay(self, frame, count, phase, metric, exercise):
+        metric_text = self._format_metric_ascii(metric, exercise)
+        exercise_en = EXERCISE_ENGLISH_NAMES.get(exercise, exercise)
+        phase_en = PHASE_ENGLISH_NAMES.get(phase, phase)
         lines = [
-            f"Action: {EXERCISE_ENGLISH_NAMES[self.exercise_name.get()]}",
+            f"Action: {exercise_en}",
             f"Count: {count}",
-            f"Phase: {PHASE_ENGLISH_NAMES.get(phase, phase)}",
+            f"Phase: {phase_en}",
             f"Metric: {metric_text}",
         ]
+        # 如果有评分数据显示
+        if self.analyzer is not None:
+            lines.append(f"Score: {self.score_text.get()}")
         x, y = 18, 28
         box_h = 34 * len(lines) + 18
         cv2.rectangle(frame, (10, 10), (300, box_h), (15, 23, 42), -1)
@@ -622,20 +719,28 @@ class WorkoutMonitoringApp:
             cv2.putText(frame, line, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.68, (255, 255, 255), 2)
             y += 34
 
-    def _format_metric(self, metric):
+    def _format_metric(self, metric, exercise=None):
         if metric is None:
             return "-"
-        config = EXERCISES[self.exercise_name.get()]
-        if config.unit == "state":
-            return "打开" if metric > 0.5 else "闭合"
+        if exercise is None:
+            exercise = self.exercise_name.get()
+        if exercise in EXERCISES:
+            config = EXERCISES[exercise]
+            if config.unit == "state":
+                return "打开" if metric > 0.5 else "闭合"
         return f"{metric:.0f}°"
 
-    def _format_metric_ascii(self, metric):
+    def _format_metric_ascii(self, metric, exercise=None):
         if metric is None:
             return "-"
-        config = EXERCISES[self.exercise_name.get()]
-        if config.unit == "state":
-            return "open" if metric > 0.5 else "closed"
+        if exercise is None:
+            exercise = self.exercise_name.get()
+        if exercise in EXERCISES:
+            config = EXERCISES[exercise]
+            if config.unit == "state":
+                return "open" if metric > 0.5 else "closed"
+        if exercise == "开合跳":
+            return "open" if (metric or 0) > 0.5 else "closed"
         return f"{metric:.0f} deg"
 
     def _show_frame(self, frame):

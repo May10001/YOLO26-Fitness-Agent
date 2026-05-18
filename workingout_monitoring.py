@@ -45,6 +45,11 @@ EXERCISE_ENGLISH_NAMES = {
     "弓步": "lunge",
     "哑铃弯举": "biceps curl",
     "开合跳": "jumping jack",
+    "引体向上": "pull-up",
+    "臀桥": "glute bridge",
+    "高抬腿": "high knees",
+    "肩推": "shoulder press",
+    "侧平举": "lateral raise",
 }
 
 PHASE_ENGLISH_NAMES = {
@@ -77,11 +82,13 @@ SIDE_KEYPOINTS = {
         "elbow": (5, 7, 9),
         "knee": (11, 13, 15),
         "hip": (5, 11, 13),
+        "shoulder": (7, 5, 11),
     },
     "右侧": {
         "elbow": (6, 8, 10),
         "knee": (12, 14, 16),
         "hip": (6, 12, 14),
+        "shoulder": (8, 6, 12),
     },
 }
 
@@ -146,6 +153,46 @@ EXERCISES = {
         count_on="high",
         unit="state",
         hint="手脚打开计 1 次",
+    ),
+    "引体向上": ExerciseConfig(
+        label="引体向上",
+        metric="elbow_angle",
+        low_threshold=160,
+        high_threshold=60,
+        count_on="low",
+        hint="下巴过杠计 1 次",
+    ),
+    "臀桥": ExerciseConfig(
+        label="臀桥",
+        metric="hip_angle",
+        low_threshold=100,
+        high_threshold=165,
+        count_on="high",
+        hint="臀部抬起计 1 次",
+    ),
+    "高抬腿": ExerciseConfig(
+        label="高抬腿",
+        metric="hip_angle",
+        low_threshold=160,
+        high_threshold=100,
+        count_on="low",
+        hint="膝盖抬高计 1 次",
+    ),
+    "肩推": ExerciseConfig(
+        label="肩推",
+        metric="elbow_angle",
+        low_threshold=75,
+        high_threshold=160,
+        count_on="high",
+        hint="手臂推起计 1 次",
+    ),
+    "侧平举": ExerciseConfig(
+        label="侧平举",
+        metric="shoulder_angle",
+        low_threshold=15,
+        high_threshold=85,
+        count_on="high",
+        hint="手臂平举至肩高计 1 次",
     ),
 }
 
@@ -237,6 +284,8 @@ class ExerciseCounter:
             return self._joint_angle(keypoints, confidences, "knee", side)
         if metric == "hip_angle":
             return self._joint_angle(keypoints, confidences, "hip", side)
+        if metric == "shoulder_angle":
+            return self._joint_angle(keypoints, confidences, "shoulder", side)
         if metric == "lunge_angle":
             values = [
                 side_angle(keypoints, confidences, "knee", "左侧"),

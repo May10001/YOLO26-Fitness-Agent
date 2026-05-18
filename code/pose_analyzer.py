@@ -169,6 +169,11 @@ class JointAngles:
             "平板支撑":   self.mean_symmetric("elbow"),
             "卷腹":       self.trunk_angle,
             "开合跳":     None,  # 开合跳用肢体展开状态
+            "引体向上":   self.mean_symmetric("elbow"),
+            "臀桥":       self.mean_symmetric("hip"),
+            "高抬腿":     self.mean_symmetric("hip"),
+            "肩推":       self.mean_symmetric("elbow"),
+            "侧平举":     self.mean_symmetric("shoulder"),
         }
         return primary_map.get(exercise)
 
@@ -448,6 +453,66 @@ EXERCISE_STANDARDS: dict[str, ExerciseStandard] = {
         symmetry_joints=("elbow", "knee"),
         symmetry_max_diff=20.0,
     ),
+    "引体向上": ExerciseStandard(
+        name="引体向上",
+        primary_joint="elbow_angle",
+        target_low=160.0,
+        target_high=55.0,
+        low_range=(140.0, 180.0),
+        high_range=(35.0, 80.0),
+        count_trigger="high",
+        trunk_max=15.0,
+        symmetry_joints=("elbow", "shoulder"),
+        symmetry_max_diff=10.0,
+    ),
+    "臀桥": ExerciseStandard(
+        name="臀桥",
+        primary_joint="hip_angle",
+        target_low=100.0,
+        target_high=175.0,
+        low_range=(80.0, 125.0),
+        high_range=(165.0, 180.0),
+        count_trigger="high",
+        trunk_max=20.0,
+        symmetry_joints=("knee", "hip"),
+        symmetry_max_diff=12.0,
+    ),
+    "高抬腿": ExerciseStandard(
+        name="高抬腿",
+        primary_joint="hip_angle",
+        target_low=170.0,
+        target_high=95.0,
+        low_range=(150.0, 180.0),
+        high_range=(70.0, 115.0),
+        count_trigger="high",
+        trunk_max=15.0,
+        symmetry_joints=("knee", "hip"),
+        symmetry_max_diff=15.0,
+    ),
+    "肩推": ExerciseStandard(
+        name="肩推",
+        primary_joint="elbow_angle",
+        target_low=70.0,
+        target_high=170.0,
+        low_range=(50.0, 90.0),
+        high_range=(155.0, 180.0),
+        count_trigger="high",
+        trunk_max=15.0,
+        symmetry_joints=("elbow", "shoulder"),
+        symmetry_max_diff=12.0,
+    ),
+    "侧平举": ExerciseStandard(
+        name="侧平举",
+        primary_joint="shoulder_angle",
+        target_low=10.0,
+        target_high=90.0,
+        low_range=(0.0, 30.0),
+        high_range=(75.0, 105.0),
+        count_trigger="high",
+        trunk_max=12.0,
+        symmetry_joints=("elbow", "shoulder"),
+        symmetry_max_diff=12.0,
+    ),
 }
 
 
@@ -461,18 +526,37 @@ class MovementScorer:
     - 关节角度得分: 0-40 分 (目标角度接近度)
     - 时序一致性得分: 0-30 分 (节奏 + 平滑度)
     - 对称性得分: 0-30 分 (左右平衡)
+
+    支持时序平滑处理，减少单帧误差:
+    - EMA 平滑角度序列，降低关键点抖动影响
+    - EMA 平滑各子项得分，避免帧间得分剧烈波动
+    - 中值滤波消除角度异常尖峰
     """
 
-    def __init__(self, exercise_name: str):
+    def __init__(self, exercise_name: str, smooth_alpha: float = 0.7,
+                 median_window: int = 5):
         self.exercise_name = exercise_name
         self.standard = EXERCISE_STANDARDS.get(exercise_name)
-        self._angle_samples: list = []       # 每帧主角度值
+        self.smooth_alpha = smooth_alpha  # EMA 平滑系数
+        self.median_window = median_window  # 中值滤波窗口
+        self._angle_samples: list = []       # 原始角度值
+        self._smoothed_angles: list = []     # EMA 平滑后角度值
         self._symmetry_diffs: dict[str, list] = {}  # 每帧各关节左右差值
 
+        # EMA 平滑后的得分缓存 (None = 尚未初始化)
+        self._smooth_angle_score: Optional[float] = None
+        self._smooth_temporal_score: Optional[float] = None
+        self._smooth_symmetry_score: Optional[float] = None
+        self._prev_total: float = 0.0
+
     def update_angle(self, angle_value: Optional[float], phase: str):
-        """记录一帧的角度（仅记录有效相位角度）."""
+        """记录一帧的角度（应用 EMA 平滑）."""
         if angle_value is not None and phase != "等待":
             self._angle_samples.append(float(angle_value))
+            # EMA 平滑: smoothed = α * raw + (1-α) * prev_smoothed
+            prev = self._smoothed_angles[-1] if self._smoothed_angles else float(angle_value)
+            smoothed = self.smooth_alpha * float(angle_value) + (1 - self.smooth_alpha) * prev
+            self._smoothed_angles.append(smoothed)
 
     def update_symmetry(self, angles: JointAngles):
         """记录一帧的对称性数据."""
@@ -486,32 +570,53 @@ class MovementScorer:
                 self._symmetry_diffs[joint].append(diff)
 
     def compute(self, temporal: TemporalFeatures) -> ScoreResult:
-        """计算最终评分."""
+        """计算最终评分 (含帧间 EMA 平滑，减少单帧误差)."""
         angle_score = self._score_angle()
         temporal_score = self._score_temporal(temporal)
         symmetry_score = self._score_symmetry()
-        total = angle_score + temporal_score + symmetry_score
+
+        # EMA 平滑各子项得分，避免帧间剧烈跳动
+        alpha = 0.6  # 得分平滑系数
+        if self._smooth_angle_score is None:
+            self._smooth_angle_score = angle_score
+            self._smooth_temporal_score = temporal_score
+            self._smooth_symmetry_score = symmetry_score
+        else:
+            self._smooth_angle_score = alpha * angle_score + (1 - alpha) * self._smooth_angle_score
+            self._smooth_temporal_score = alpha * temporal_score + (1 - alpha) * self._smooth_temporal_score
+            self._smooth_symmetry_score = alpha * symmetry_score + (1 - alpha) * self._smooth_symmetry_score
+
+        total = self._smooth_angle_score + self._smooth_temporal_score + self._smooth_symmetry_score
         return ScoreResult(
-            total=min(total, 100.0),
-            angle_score=angle_score,
-            temporal_score=temporal_score,
-            symmetry_score=symmetry_score,
+            total=round(min(total, 100.0), 1),
+            angle_score=round(self._smooth_angle_score, 1),
+            temporal_score=round(self._smooth_temporal_score, 1),
+            symmetry_score=round(self._smooth_symmetry_score, 1),
         )
 
     def _score_angle(self) -> float:
         """关节角度得分 (0-40).
 
         使用高斯衰减: score = 40 * exp(-(偏差/tolerance)²)
+        使用 EMA 平滑后的角度序列 + 中值滤波抗尖峰.
         """
-        if not self.standard or not self._angle_samples:
+        if not self.standard or not self._smoothed_angles:
             return 0.0
 
         # 根据当前相位选择目标角度
         target = self.standard.target_low if self._in_low_phase else self.standard.target_high
         tolerance = 15.0  # 容差
 
-        # 取最近样本
-        recent = self._angle_samples[-30:] if len(self._angle_samples) > 30 else self._angle_samples
+        # 取最近平滑样本
+        smooth = self._smoothed_angles
+        recent = smooth[-30:] if len(smooth) > 30 else smooth
+
+        # 中值滤波: 剔除异常尖峰
+        if len(recent) >= self.median_window:
+            recent_sorted = sorted(recent)
+            half_w = self.median_window // 2
+            recent = recent_sorted[half_w:-half_w] if half_w > 0 else recent_sorted
+
         deviations = [abs(a - target) for a in recent]
         mean_dev = float(np.mean(deviations))
 
@@ -563,7 +668,12 @@ class MovementScorer:
 
     def reset(self):
         self._angle_samples.clear()
+        self._smoothed_angles.clear()
         self._symmetry_diffs.clear()
+        self._smooth_angle_score = None
+        self._smooth_temporal_score = None
+        self._smooth_symmetry_score = None
+        self._prev_total = 0.0
 
 
 # ============================================================================
@@ -590,6 +700,11 @@ class ErrorDetector:
             "平板支撑": [self._detect_hip_sagging_plank],
             "卷腹":     [self._detect_neck_strain],
             "开合跳":   [self._detect_incomplete_spread],
+            "引体向上": [self._detect_pullup_swing, self._detect_elbow_flare],
+            "臀桥":     [self._detect_bridge_asymmetry, self._detect_hip_sagging_pushup],
+            "高抬腿":   [self._detect_high_knee_lean, self._detect_knee_valgus],
+            "肩推":     [self._detect_shoulder_press_arch, self._detect_elbow_flare],
+            "侧平举":   [self._detect_lateral_raise_swing, self._detect_elbow_flare],
         }
 
         for detector in methods.get(exercise, []):
@@ -728,6 +843,74 @@ class ErrorDetector:
             return ErrorInfo(name=name, severity=2,
                              message=f"检测到髋部下塌 (偏离 {hip_deviation/body_length*100:.0f}%)",
                              suggestion=suggestion)
+        return None
+
+    # --- 辅助错误: 侧平举身体晃动 ---
+    def _detect_lateral_raise_swing(self, angles: JointAngles, kp, conf, phase) -> Optional[ErrorInfo]:
+        """侧平举时躯干倾角 > 15° 表示身体借力晃动."""
+        if phase != "高位":
+            return None
+        if angles.trunk_angle is not None and angles.trunk_angle > 15.0:
+            return ErrorInfo(
+                name="身体晃动借力",
+                severity=1,
+                message=f"躯干倾斜 {angles.trunk_angle:.0f}°，疑似借力",
+                suggestion="保持躯干稳定直立，仅用肩部发力完成侧平举",
+            )
+        return None
+
+    # --- 辅助错误: 引体向上摆动 ---
+    def _detect_pullup_swing(self, angles: JointAngles, kp, conf, phase) -> Optional[ErrorInfo]:
+        """引体向上时躯干倾角 > 12° 表示身体摆动借力."""
+        if angles.trunk_angle is not None and angles.trunk_angle > 12.0:
+            return ErrorInfo(
+                name="身体摆动",
+                severity=2,
+                message=f"躯干倾斜 {angles.trunk_angle:.0f}°，疑似摆动借力",
+                suggestion="收紧核心，控制身体稳定，避免借助惯性摆动",
+            )
+        return None
+
+    # --- 辅助错误: 臀桥不对称 ---
+    def _detect_bridge_asymmetry(self, angles: JointAngles, kp, conf, phase) -> Optional[ErrorInfo]:
+        """臀桥高位时左右髋角差异 > 10° 表示发力不对称."""
+        if phase != "高位":
+            return None
+        hip_l = angles.hip_left
+        hip_r = angles.hip_right
+        if hip_l is not None and hip_r is not None:
+            diff = abs(hip_l - hip_r)
+            if diff > 10.0:
+                return ErrorInfo(
+                    name="臀桥不对称",
+                    severity=1,
+                    message=f"左右髋角相差 {diff:.0f}°",
+                    suggestion="均匀发力，确保双侧臀部同时抬起",
+                )
+        return None
+
+    # --- 辅助错误: 高抬腿身体后仰 ---
+    def _detect_high_knee_lean(self, angles: JointAngles, kp, conf, phase) -> Optional[ErrorInfo]:
+        """高抬腿时躯干倾角 > 18° 表示身体后仰."""
+        if angles.trunk_angle is not None and angles.trunk_angle > 18.0:
+            return ErrorInfo(
+                name="身体后仰",
+                severity=2,
+                message=f"躯干倾斜 {angles.trunk_angle:.0f}°，疑似后仰",
+                suggestion="保持上身挺直微前倾，核心收紧，目视前方",
+            )
+        return None
+
+    # --- 辅助错误: 肩推弓背 ---
+    def _detect_shoulder_press_arch(self, angles: JointAngles, kp, conf, phase) -> Optional[ErrorInfo]:
+        """肩推时躯干倾角 > 15° 表示过度弓背."""
+        if angles.trunk_angle is not None and angles.trunk_angle > 15.0:
+            return ErrorInfo(
+                name="肩推弓背",
+                severity=2,
+                message=f"躯干倾斜 {angles.trunk_angle:.0f}°，疑似弓背借力",
+                suggestion="收紧核心，保持背部直立，避免过度后仰借力",
+            )
         return None
 
     def reset(self):
@@ -921,12 +1104,14 @@ def _self_test():
 
     # --- 测试 3: 动作标准参数 ---
     print("\n[3] 动作标准参数")
-    for name in ["深蹲", "俯卧撑", "平板支撑", "卷腹", "开合跳"]:
+    all_exercises = ["深蹲", "俯卧撑", "平板支撑", "卷腹", "开合跳",
+                     "引体向上", "臀桥", "高抬腿", "肩推", "侧平举"]
+    for name in all_exercises:
         std = EXERCISE_STANDARDS.get(name)
         assert std is not None, f"缺少动作: {name}"
         print(f"  {name}: 主关节={std.primary_joint}, "
               f"低位={std.low_range}, 高位={std.high_range}")
-    print("  [PASS] 全部5个动作已定义")
+    print(f"  [PASS] 全部{len(all_exercises)}个动作已定义")
 
     # --- 测试 4: 评分算法 ---
     print("\n[4] 评分算法")

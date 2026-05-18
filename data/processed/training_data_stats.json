@@ -1,0 +1,14 @@
+{
+  "total_raw": 1626,
+  "total_converted": 1626,
+  "skipped": 0,
+  "train_count": 1464,
+  "eval_count": 162,
+  "type_distribution": {
+    "action_correction": 1006,
+    "fitness_planning": 506,
+    "fitness_qa": 86,
+    "exercise_technique": 28
+  },
+  "system_prompt": "你是一名专业的健身教练和运动科学顾问。你的职责是：\n1. 提供专业、安全的健身指导\n2. 纠正运动动作中的错误姿态\n3. 根据用户情况制定合理的训练计划\n4. 提供营养和恢复建议\n5. 强调安全第一，避免运动损伤\n\n请用中文回答，保持专业、鼓励、清晰的语气。回答应具体、可操作，避免模糊的建议。"
+}

@@ -51,9 +51,11 @@ class FitnessAgent:
     def __init__(
         self,
         lora_path: Optional[str] = None,
+        model_size: str = "1.5B",
         profile_dir: Path = Path("./user_profiles"),
     ):
         self.lora_path = lora_path
+        self.model_size = model_size
         self.profile_dir = Path(profile_dir)
 
         self._dialogue: Optional[DialogueAssistant] = None
@@ -67,15 +69,19 @@ class FitnessAgent:
     @property
     def dialogue(self) -> DialogueAssistant:
         if self._dialogue is None:
-            logger.info("Initializing DialogueAssistant")
-            self._dialogue = DialogueAssistant()
+            logger.info("Initializing DialogueAssistant (%s)", self.model_size)
+            self._dialogue = DialogueAssistant(model_size=self.model_size)
         return self._dialogue
 
     @property
     def fitness(self) -> FitnessAssistant:
         if self._fitness is None:
-            logger.info("Initializing FitnessAssistant (lora=%s)", self.lora_path)
-            self._fitness = FitnessAssistant(lora_path=self.lora_path)
+            logger.info("Initializing FitnessAssistant (lora=%s, model=%s)",
+                        self.lora_path, self.model_size)
+            self._fitness = FitnessAssistant(
+                lora_path=self.lora_path,
+                model_size=self.model_size,
+            )
         return self._fitness
 
     # ---- Exercise management ----

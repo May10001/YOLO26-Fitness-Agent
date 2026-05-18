@@ -8,7 +8,8 @@
 YOLO26-Fitness-Agent/
 ├── code/                          # 核心代码
 │   ├── agent.py                   # 主编排器 — 统一的 FitnessAgent 接口
-│   ├── pose_analyzer.py           # 姿态分析引擎（角度提取/错误检测/评分）
+│   ├── pose_analyzer.py           # 姿态分析引擎（角度提取/错误检测/评分/平滑）
+│   ├── visualization.py           # 可视化对比（关节角度热力图）
 │   ├── guidance/                  # 实时指导模块
 │   │   └── context_engine.py      # 上下文感知的逐帧教练引擎
 │   ├── planning/                  # 训练计划模块
@@ -35,6 +36,8 @@ YOLO26-Fitness-Agent/
 │   ├── model_comparison_report.md # 模型选型对比报告
 │   ├── raw/                       # 原始抓取数据
 │   └── processed/                 # 清洗后的 JSON/JSONL 数据集
+├── tests/                         # 单元测试
+│   └── test_pose_analyzer.py      # 姿态分析引擎测试（44 个用例）
 ├── workingout_monitoring.py       # Tkinter GUI 实时健身监测应用
 └── requirements.txt               # 项目依赖
 ```
@@ -44,24 +47,46 @@ YOLO26-Fitness-Agent/
 ### 1. 姿态分析引擎 (`code/pose_analyzer.py`)
 
 - 17 个 COCO 关键点 → 10 个关节角度提取
-- 5 个核心动作标准参数（深蹲/俯卧撑/平板支撑/卷腹/开合跳）
-- 三维度动作评分算法（角度 40 分 + 时序 30 分 + 对称性 30 分）
-- 5 类常见错误实时检测（膝盖内扣/塌腰/弓背/颈部代偿/手臂不充分）
+- **10 个核心动作标准参数**：
 
-### 2. 实时指导引擎 (`code/guidance/context_engine.py`)
+| # | 动作 | 主监测关节 | 低位→高位 | 计数触发 |
+|---|------|-----------|----------|----------|
+| 1 | 深蹲 | knee_angle | 90°→170° | 高位 |
+| 2 | 俯卧撑 | elbow_angle | 90°→170° | 高位 |
+| 3 | 平板支撑 | elbow_angle | 90°→90° | 计时 |
+| 4 | 卷腹 | trunk_angle | 40°→5° | 高位 |
+| 5 | 开合跳 | spread_state | 0→1 | 高位 |
+| 6 | 引体向上 | elbow_angle | 160°→55° | 高位 |
+| 7 | 臀桥 | hip_angle | 100°→175° | 高位 |
+| 8 | 高抬腿 | hip_angle | 170°→95° | 高位 |
+| 9 | 肩推 | elbow_angle | 70°→170° | 高位 |
+| 10 | 侧平举 | shoulder_angle | 10°→90° | 高位 |
+
+- **三维度动作评分算法**（角度 40 分 + 时序 30 分 + 对称性 30 分）
+- **时序平滑处理**：EMA 角度平滑 + 中值滤波 + 得分帧间平滑，减少单帧关键点抖动误差
+- **10+ 类常见错误实时检测**（膝盖内扣/塌腰/弓背/颈部代偿/手臂不充分/身体摆动/臀桥不对称/身体后仰/肩推弓背/借力晃动）
+
+### 2. 可视化对比 (`code/visualization.py`)
+
+- **JointAngleHeatmap** — 标准动作 vs 用户关节角度热力图对比
+- 偏离度矩阵计算（good / warning / bad 三级分类）
+- ASCII 终端热力图输出（无需 matplotlib）
+- 各动作标准参考角度范围定义
+
+### 3. 实时指导引擎 (`code/guidance/context_engine.py`)
 
 - 4 类指导消息：动作纠正、表现反馈、里程碑鼓励、安全警告
 - 上下文状态追踪（连续帧、错误计数、最佳评分）
 - 冷却机制避免重复提示
 
-### 3. 训练计划生成 (`code/planning/plan_generator.py`)
+### 4. 训练计划生成 (`code/planning/plan_generator.py`)
 
 - 基于用户画像的个性化周度计划
 - 渐进式超负荷策略
 - 5 种训练目标：增肌/塑形/耐力/减脂/综合健康
 - 支持分化训练（上下肢/推拉腿/全身）
 
-### 4. 数据采集管线 (`code/data_collection/`)
+### 5. 数据采集管线 (`code/data_collection/`)
 
 | 数据源 | 内容 | 爬虫状态 |
 |--------|------|----------|
@@ -71,7 +96,7 @@ YOLO26-Fitness-Agent/
 
 > 由于 B 站/Keep/知乎需要登录态，本仓库提供完整的爬虫框架和丰富的合成数据用于离线开发和测试。
 
-### 5. 数据处理管线 (`code/data_processing/`)
+### 6. 数据处理管线 (`code/data_processing/`)
 
 - 文本清洗：全角→半角、空白规范化、控制字符过滤
 - 精确 + 模糊去重（SequenceMatcher, 阈值 0.85）
@@ -79,7 +104,7 @@ YOLO26-Fitness-Agent/
 - 自动标注：动作类型（28 类）、错误类型（20 类）、指导类型、难度、目标肌群
 - **输出数据集**：1626 条样本（~1000 动作纠错 + 500 训练规划 + 130 问答）
 
-### 6. Prompt 工程 (`code/prompt_engineering/`)
+### 7. Prompt 工程 (`code/prompt_engineering/`)
 
 两个核心 Prompt 模板：
 
@@ -97,7 +122,7 @@ YOLO26-Fitness-Agent/
 
 支持动态 Few-shot 选择、LLM 调用和规则回退。
 
-### 7. 模型选型对比 (`code/model_selection/compare.py`)
+### 8. 模型选型对比 (`code/model_selection/compare.py`)
 
 对比了 7 个中文开源模型，评估维度：
 - VRAM 需求（FP16/INT8/INT4）
@@ -119,6 +144,19 @@ pip install -r requirements.txt
 
 ```bash
 python workingout_monitoring.py --model yolo26n-pose.pt
+```
+
+### 运行单元测试
+
+```bash
+python -m pytest tests/test_pose_analyzer.py -v
+```
+
+### 运行自测
+
+```bash
+python -m code.pose_analyzer     # 姿态分析引擎自测
+python -m code.visualization     # 可视化模块自测
 ```
 
 ### 生成微调数据集
@@ -169,6 +207,25 @@ reply = agent.chat("深蹲时膝盖能不能超过脚尖？")
 # 生成训练计划
 plan = agent.generate_plan()
 print(plan)
+```
+
+### 可视化对比
+
+```python
+from code.visualization import JointAngleHeatmap, generate_ascii_heatmap
+from code.pose_analyzer import JointAngles
+
+hm = JointAngleHeatmap("深蹲")
+angles = JointAngles(knee_left=90, knee_right=92, hip_left=82, hip_right=80)
+hm.record_frame(angles)
+
+# 终端热力图
+matrix = hm.compute_deviation_matrix()
+print(generate_ascii_heatmap(matrix))
+
+# 偏离摘要
+summary = hm.get_summary()
+print(f"总偏离: {summary['overall_deviation']}°")
 ```
 
 ### 生成模型对比报告

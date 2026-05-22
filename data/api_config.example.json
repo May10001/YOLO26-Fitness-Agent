@@ -1,0 +1,5 @@
+{
+    "use_remote": false,
+    "api_key": "sk-把你的API-Key填在这里",
+    "model_code": "把你的部署模型Code填在这里"
+}

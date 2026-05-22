@@ -67,7 +67,16 @@ scp code/data_collection/*.py user@your-server:~/fitness-finetune/code/data_coll
 ssh user@your-server-ip
 ```
 
-### 2.2 安装 CUDA 版 PyTorch
+### 2.2 配置 HuggingFace 镜像 (国内服务器必须)
+
+```bash
+# 添加到 ~/.bashrc 或 ~/.zshrc 持久化
+export HF_ENDPOINT=https://hf-mirror.com
+```
+
+如果不配置镜像，模型下载会超时失败。
+
+### 2.3 安装 CUDA 版 PyTorch
 
 ```bash
 # 确认 GPU 可用
@@ -161,7 +170,7 @@ INFO - Eval:  162 → data/processed/eval_data.jsonl
 用 0.5B 模型 + 内置小数据集跑 1 epoch，约 3 分钟，验证环境无误：
 
 ```bash
-python -m code.models.fine_tuning.trainer \
+HF_ENDPOINT=https://hf-mirror.com python -m code.models.fine_tuning.trainer \
     --model 0.5B \
     --use-builtin-data \
     --epochs 1 \
@@ -182,7 +191,7 @@ python -u -m code.models.fine_tuning.trainer \
     --batch-size 8
 
 # 一般 GPU：1.5B + QLoRA，稳妥可靠
-python -m code.models.fine_tuning.trainer \
+HF_ENDPOINT=https://hf-mirror.com python -m code.models.fine_tuning.trainer \
     --model 1.5B \
     --epochs 3 \
     --batch-size 2

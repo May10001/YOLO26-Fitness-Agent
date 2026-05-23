@@ -8,6 +8,7 @@
         :is-running="training.isRunning.value"
         :formatted-time="training.formattedTime.value"
         :fps="fps"
+        :stream="camera.stream.value"
       />
       <ControlBar
         :is-idle="training.isIdle.value"

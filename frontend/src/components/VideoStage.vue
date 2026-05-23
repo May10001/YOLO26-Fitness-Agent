@@ -45,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { DetectionResult, ScoreData } from '../types'
 import GaugeBar from './GaugeBar.vue'
 import SkeletonOverlay from './SkeletonOverlay.vue'
@@ -56,7 +56,17 @@ const props = defineProps<{
   isRunning: boolean
   formattedTime: string
   fps: number
+  stream: MediaStream | null
 }>()
+
+const videoEl = ref<HTMLVideoElement | null>(null)
+
+watch(() => props.stream, (s) => {
+  if (videoEl.value && s) {
+    videoEl.value.srcObject = s
+    videoEl.value.play()
+  }
+})
 
 const score = computed<ScoreData>(() => props.result?.score || { total: 0, angle: 0, temporal: 0, symmetry: 0 })
 

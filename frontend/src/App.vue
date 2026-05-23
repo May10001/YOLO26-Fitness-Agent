@@ -56,7 +56,6 @@ const training = useTrainingState()
 
 const exercises = ['深蹲', '俯卧撑', '平板支撑', '卷腹', '开合跳']
 const currentExercise = ref('深蹲')
-const totalErrors = ref(0)
 const fps = ref(0)
 let frameInterval: number | null = null
 let frameCount = 0
@@ -66,13 +65,22 @@ const currentScore = computed<ScoreData>(() =>
   ws.lastResult.value?.score || { total: 0, angle: 0, temporal: 0, symmetry: 0 }
 )
 
+const totalErrors = computed(() => {
+  return ws.lastResult.value?.errors?.length || 0
+})
+
 async function startTraining() {
   await camera.start()
   ws.connect()
-  ws.setExercise(currentExercise.value)
   training.start()
-  totalErrors.value = 0
-  startFrameLoop()
+  // Wait for WebSocket to open before sending exercise and starting frame loop
+  const waitOpen = setInterval(() => {
+    if (ws.connected.value) {
+      clearInterval(waitOpen)
+      ws.setExercise(currentExercise.value)
+      startFrameLoop()
+    }
+  }, 100)
 }
 
 function stopTraining() {
@@ -96,7 +104,6 @@ function switchExercise(name: string) {
   currentExercise.value = name
   ws.setExercise(name)
   ws.reset()
-  totalErrors.value = 0
 }
 
 function startFrameLoop() {

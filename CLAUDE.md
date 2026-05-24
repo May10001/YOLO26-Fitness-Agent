@@ -9,8 +9,8 @@ YOLO26-Fitness-Agent is a real-time AI fitness coach combining YOLO26 pose estim
 ## Commands
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (openai + dashscope needed for remote API mode)
+pip install -r requirements.txt openai dashscope
 
 # Run the unified Tkinter GUI (real-time webcam fitness monitoring + AI chat)
 python -m code.workout_app --model yolo26n-pose.pt
@@ -28,6 +28,11 @@ python -m code.data_processing.pipeline
 # Generate model comparison report
 python -m code.model_selection.compare
 
+# Test remote API connectivity (DashScope Qwen2.5-7B, no local GPU)
+python scripts/test_remote_api.py
+python scripts/test_remote_api.py -q "如何做标准俯卧撑？"
+python scripts/test_remote_api.py -m          # multi-turn chat mode
+
 # LoRA fine-tuning
 python -m code.models.fine_tuning.trainer                    # default 1.5B
 python -m code.models.fine_tuning.trainer --model 7B         # full quality
@@ -43,6 +48,7 @@ Webcam → YOLO26 pose (17 keypoints) → PoseAnalyzer → ContextEngine → gui
                                                       → JointAngleHeatmap → ASCII heatmap
                                 User query → FitnessAgent.chat() → Qwen2.5 (+LoRA) → reply
                                 UserProfile → PlanGenerator → weekly workout plan
+                                AnalysisResult + GuidanceState → RealTimeCoach → DashScope API → chat panel
 ```
 
 ### Key modules
@@ -50,6 +56,10 @@ Webcam → YOLO26 pose (17 keypoints) → PoseAnalyzer → ContextEngine → gui
 - **`code/pose_analyzer.py`** — Core engine. Extracts 10 joint angles from 17 COCO keypoints, scores movements on 3 dimensions (angle 40pts + temporal 30pts + symmetry 30pts), applies EMA/median-filter temporal smoothing, and detects 10+ error types (knee valgus, arched back, neck compensation, etc.). Defines `EXERCISE_STANDARDS` with angle thresholds for all 10 exercises.
 
 - **`code/agent.py`** — `FitnessAgent` orchestrator. Lazy-initializes `DialogueAssistant`, `FitnessAssistant`, `ContextEngine`, and `PlanGenerator`. Auto-routes chat messages: if the message contains Chinese fitness keywords → `FitnessAssistant` (with LoRA + pose context), otherwise → `DialogueAssistant` (general Qwen2.5).
+
+- **`code/realtime_coach.py`** — Real-time LLM coaching engine. Consumes per-frame `AnalysisResult` + `GuidanceState`, builds structured Chinese context strings, evaluates triggers (severe error, score drop, milestone, personal best, good streak), and manages rate limiting (cooldowns per type + global 6s minimum). Contains `CoachContextBuilder`, `CoachTriggerEvaluator`, and `RealTimeCoach` classes.
+
+- **`code/coach_system_prompt.py`** — System prompt and context templates for the fine-tuned coach model. Contains `COACH_SYSTEM_PROMPT` (full, for reactive chat), `COACH_SYSTEM_PROMPT_PROACTIVE` (shorter, for auto-push), and `COACH_CONTEXT_TEMPLATE` / `COACH_REACTIVE_TEMPLATE` for structured context formatting.
 
 - **`code/models/base_model.py`** — Singleton `BaseModel` wrapping Qwen2.5-Instruct (0.5B/1.5B/3B/7B) with optional LoRA adapter injection via PEFT. Handles device placement (CUDA/CPU), tokenizer setup, and chat template formatting.
 
@@ -86,6 +96,30 @@ Webcam → YOLO26 pose (17 keypoints) → PoseAnalyzer → ContextEngine → gui
 | Mobile offline | Qwen2.5-0.5B | INT4 | ~0.3GB | <50ms |
 | Server planning | Qwen2.5-7B | INT8 | ~8GB | <2s |
 | Deep fitness Q&A | Qwen2.5-7B | FP16 | ~14GB | <3s |
+
+## Remote API (DashScope)
+
+The project supports two chat backends, toggled via the GUI settings panel:
+
+| Mode | What it does | Requirements |
+|------|-------------|--------------|
+| **Remote (recommended)** | OpenAI-compatible → DashScope → Qwen2.5-7B + LoRA | `pip install openai`, API key |
+| Local | HuggingFace → Qwen2.5 0.5B~7B | `torch`, `transformers`, GPU RAM |
+
+**Remote API config** (`data/api_config.json`, gitignored):
+
+```json
+{
+    "use_remote": true,
+    "api_key": "sk-427b5295e2884e1183491ee9ab8b5e16",
+    "model_code": "qwen2.5-7b-instruct-d1a1cabf17c2-yzqr"
+}
+```
+
+- Base URL: `https://dashscope.aliyuncs.com/compatible-mode/v1`
+- The API key belongs to the DashScope account that owns the deployment — only the creator's key works.
+- `data/api_config.json` is in `.gitignore` to prevent credential leaks.
+- Test connectivity with `python scripts/test_remote_api.py` before launching the GUI.
 
 ## Important patterns
 

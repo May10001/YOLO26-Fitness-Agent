@@ -30,13 +30,24 @@ import numpy as np
 from PIL import Image, ImageTk
 from ultralytics import YOLO
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+sys.path.insert(0, _PROJECT_ROOT)
+# 移除脚本自身目录, 避免屏蔽 code 包 (python code/workout_app.py 时发生)
+_script_dir = str(Path(__file__).resolve().parent)
+if _script_dir in sys.path:
+    sys.path.remove(_script_dir)
+# cv2/numpy/ultralytics 等库会间接导入 stdlib 的 code 模块,
+# 导致 "code is not a package" 错误, 需从 sys.modules 中移除
+if "code" in sys.modules:
+    del sys.modules["code"]
 from code.pose_analyzer import (
     PoseAnalyzer, JointAngles, AnalysisResult,
     EXERCISE_STANDARDS, JointAngleExtractor
 )
 from code.guidance.context_engine import ContextEngine, GuidanceMessage
 from code.visualization import JointAngleHeatmap
+from code.coach_system_prompt import COACH_SYSTEM_PROMPT, COACH_SYSTEM_PROMPT_PROACTIVE
+from code.realtime_coach import RealTimeCoach
 
 try:
     from code.models.base_model import BaseModel
@@ -482,6 +493,10 @@ class WorkoutApp:
         self.chat_model_code = tk.StringVar(value="")
         self._load_api_config()
 
+        # 实时 LLM 教练
+        self.coach = RealTimeCoach()
+        self._latest_analysis: Optional[AnalysisResult] = None
+
         # 构建UI
         self._setup_style()
         self._build_ui()
@@ -835,6 +850,8 @@ class WorkoutApp:
             return
 
         self._reset_metrics()
+        self.coach.reset()
+        self._latest_analysis = None
         self.result_queue = queue.Queue(maxsize=2)
 
         if self.app_state == "paused":
@@ -1010,6 +1027,21 @@ class WorkoutApp:
         else:
             self.guidance_text.set("")
 
+        # 存储最新分析结果供聊天上下文使用
+        self._latest_analysis = analysis
+
+        # 实时 LLM 教练主动推送
+        if (self.chat_use_remote.get() and self.chat_initialized
+                and not self.chat_processing
+                and self.detection_thread and self.detection_thread.engine):
+            context_str = self.coach.evaluate_frame(
+                analysis,
+                self.detection_thread.engine.state,
+                self.exercise_name.get(),
+            )
+            if context_str:
+                self._proactive_coach_call(context_str)
+
     def _fmt_metric(self, metric):
         if metric is None:
             return "-"
@@ -1024,7 +1056,7 @@ class WorkoutApp:
 
         win = tk.Toplevel(self.root)
         win.title("训练历史记录")
-        win.geometry("700*500")
+        win.geometry("700x500")
         win.minsize(500, 350)
 
         if not records:
@@ -1059,7 +1091,12 @@ class WorkoutApp:
     # ---- 聊天助手 ----
 
     def _init_chat(self):
-        if self.chat_use_remote.get() and self.chat_api_key.get() and self.chat_model_code.get():
+        # 有远程 API 凭证时优先使用远程模式
+        has_remote_creds = bool(self.chat_api_key.get() and self.chat_model_code.get())
+        if has_remote_creds:
+            if not self.chat_use_remote.get():
+                self.chat_use_remote.set(True)
+                self._save_api_config()
             self.chat_initialized = True
             self.chat_status_label.configure(text="7B 远程 API 就绪")
             return
@@ -1131,10 +1168,28 @@ class WorkoutApp:
         self.chat_status_label.configure(text="回复中…")
         self._append_chat("user", user_text)
 
-        threading.Thread(target=self._generate_chat, args=(user_text,), daemon=True).start()
+        # Build real-time context if training is active
+        context = None
+        if self.app_state == "running" and self.detection_thread and self.detection_thread.engine:
+            context = self.coach.build_chat_context(
+                self._latest_analysis,
+                self.detection_thread.engine.state,
+                self.exercise_name.get(),
+                user_text,
+            )
 
-    def _generate_chat(self, user_message):
+        threading.Thread(target=self._generate_chat, args=(user_text, context), daemon=True).start()
+
+    def _generate_chat(self, user_message, context=None):
         try:
+            # Choose system prompt and message content based on context
+            if context:
+                system_prompt = COACH_SYSTEM_PROMPT
+                user_content = context
+            else:
+                system_prompt = CHAT_SYSTEM_PROMPT
+                user_content = user_message
+
             if self.chat_use_remote.get() and self.chat_api_key.get():
                 from openai import OpenAI
                 client = OpenAI(
@@ -1144,8 +1199,8 @@ class WorkoutApp:
                 completion = client.chat.completions.create(
                     model=self.chat_model_code.get(),
                     messages=[
-                        {"role": "system", "content": CHAT_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_message},
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
                     ],
                     temperature=0.7,
                     max_tokens=800,
@@ -1154,8 +1209,8 @@ class WorkoutApp:
             else:
                 model = BaseModel.get_instance(model_size=self.chat_model_size.get())
                 messages = [
-                    {"role": "system", "content": CHAT_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_message},
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content},
                 ]
                 reply = model.chat(messages, max_tokens=800, temperature=0.7)
         except Exception as e:
@@ -1179,6 +1234,48 @@ class WorkoutApp:
                 pass
             device = "GPU" if torch_available else "CPU"
             self.chat_status_label.configure(text=f"{self.chat_model_size.get()} ({device})")
+
+    # ---- 实时 LLM 教练主动推送 ----
+
+    def _proactive_coach_call(self, context_str: str):
+        """Fire a proactive coaching API call (auto-push to chat)."""
+        self.chat_processing = True
+        self.chat_status_label.configure(text="教练思考中…")
+        threading.Thread(
+            target=self._generate_coach_message,
+            args=(context_str,),
+            daemon=True,
+        ).start()
+
+    def _generate_coach_message(self, context_str: str):
+        """Generate a proactive coaching message (no user input)."""
+        try:
+            from openai import OpenAI
+            client = OpenAI(
+                api_key=self.chat_api_key.get(),
+                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            )
+            completion = client.chat.completions.create(
+                model=self.chat_model_code.get(),
+                messages=[
+                    {"role": "system", "content": COACH_SYSTEM_PROMPT_PROACTIVE},
+                    {"role": "user", "content": context_str},
+                ],
+                temperature=0.7,
+                max_tokens=300,
+            )
+            reply = completion.choices[0].message.content
+        except Exception:
+            reply = None
+        self.root.after(0, self._on_coach_response, reply)
+
+    def _on_coach_response(self, reply):
+        """Handle proactive coaching response."""
+        if reply:
+            self._append_chat("assistant", reply)
+        self.chat_processing = False
+        if self.chat_use_remote.get():
+            self.chat_status_label.configure(text="7B 远程 API 就绪")
 
 
 # ============================================================================

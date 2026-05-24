@@ -8,7 +8,22 @@
       "Bash(git *)",
       "Bash(python -m code.models.fine_tuning.prepare_data)",
       "Bash(python -c \"import ast; ast.parse\\(open\\('code/models/fine_tuning/trainer.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('code/models/fine_tuning/trainer.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('code/models/fine_tuning/trainer.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(python scripts/test_remote_api.py)",
+      "Bash(python -c ' *)",
+      "Bash(python scripts/test_remote_api.py -q \"如何做标准俯卧撑？请简要回答\")",
+      "Bash(python -m code.workout_app)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); from code.workout_app import *; print\\('Import OK'\\)\")",
+      "Bash(python -c \"from code.pose_analyzer import PoseAnalyzer, JointAngles, AnalysisResult, EXERCISE_STANDARDS, JointAngleExtractor; print\\('pose_analyzer OK'\\)\")",
+      "Bash(python -c \"from code.guidance.context_engine import ContextEngine, GuidanceMessage; print\\('context_engine OK'\\)\")",
+      "Bash(python -c \"from code.visualization import JointAngleHeatmap; print\\('visualization OK'\\)\")",
+      "Bash(python code/workout_app.py)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); exec\\(open\\('code/workout_app.py'\\).read\\(\\)\\)\")",
+      "Bash(python3 -c \"import json; data = json.load\\(open\\('data/processed/fitness_dataset.json','r',encoding='utf-8'\\)\\); types = set\\(\\); [types.add\\(s.get\\('type','?'\\)\\) for s in data.get\\('correction_samples',[]\\)]; print\\('Types:', types\\); print\\('Count:', len\\(data.get\\('correction_samples',[]\\)\\)\\)\")",
+      "Bash(python -c \"import json; data = json.load\\(open\\('data/processed/fitness_dataset.json','r',encoding='utf-8'\\)\\); types = set\\(\\); [types.add\\(s.get\\('type','?'\\)\\) for s in data.get\\('correction_samples',[]\\)]; print\\('Types:', types\\); print\\('Count:', len\\(data.get\\('correction_samples',[]\\)\\)\\)\")",
+      "Bash(python -m pytest tests/test_pose_analyzer.py -v)",
+      "Bash(timeout 15 python scripts/test_remote_api.py -q \"你好，1+1等于几？\")",
+      "Bash(timeout 6 python -c ' *)"
     ]
   }
 }

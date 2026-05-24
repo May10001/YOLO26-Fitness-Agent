@@ -20,6 +20,23 @@ python -m code.workout_app --model yolo26n-pose.pt
 
 首次运行会自动下载 YOLO26 pose 模型（7.5MB）。
 
+### 测试远程 API 连通性
+
+在配置 GUI 之前，先用命令行脚本验证远端模型可正常调用（无需本地 GPU）：
+
+```bash
+# 单次问答测试
+python scripts/test_remote_api.py
+
+# 指定问题
+python scripts/test_remote_api.py -q "如何做标准俯卧撑？"
+
+# 多轮对话模式（输入 /quit 退出）
+python scripts/test_remote_api.py -m
+```
+
+脚本读取 `data/api_config.json` 中的配置，返回中文健身指导即表示连通成功。
+
 ### 配置 AI 聊天（组员共用一个远程 API）
 
 启动后在设置面板中：
@@ -47,8 +64,10 @@ YOLO26-Fitness-Agent/
 │   ├── pose_analyzer.py             # 姿态分析引擎（角度/错误/评分/平滑）
 │   ├── visualization.py             # 关节角度热力图对比
 │   ├── agent.py                     # FitnessAgent 统一接口
+│   ├── realtime_coach.py            # ★ 实时 LLM 教练引擎（触发判断+上下文+频率控制）
+│   ├── coach_system_prompt.py       # ★ 微调教练模型系统提示词
 │   ├── guidance/
-│   │   └── context_engine.py        # 逐帧教练指导引擎
+│   │   └── context_engine.py        # 逐帧教练指导引擎（规则驱动）
 │   ├── planning/
 │   │   ├── user_profile.py          # 用户画像（JSON 持久化）
 │   │   └── plan_generator.py        # 周度训练计划生成
@@ -64,6 +83,8 @@ YOLO26-Fitness-Agent/
 │   ├── data_collection/             # B 站/Keep/知乎 数据采集
 │   ├── data_processing/             # 数据处理管线（清洗/标注/构建）
 │   └── prompt_engineering/          # Prompt 工程（模板 + Few-shot）
+├── scripts/
+│   └── test_remote_api.py           # 远程 API 连通性测试脚本
 ├── data/
 │   ├── api_config.example.json      # 远程 API 配置模板
 │   ├── processed/                   # 1626 条健身数据集
@@ -90,6 +111,7 @@ YOLO26-Fitness-Agent/
 | 开始/暂停/停止 | 状态机控制，暂停时冻结检测线程 |
 | 训练历史 | JSON 持久化，弹窗 Treeview 查看 |
 | **AI 聊天助手** | **Qwen2.5-7B LoRA 健身专家，百炼云端推理免部署** |
+| **实时 LLM 教练** | **逐帧接收评分/角度/错误，主动推送纠正指导到聊天面板** |
 | 多线程架构 | 检测线程 + UI 线程分离，目标 ≥30fps |
 | 离线模式 | 本地 YOLO + 可选本地 LLM，无网络也能用 |
 
@@ -120,11 +142,48 @@ workout_app 聊天面板
     ├── 远程模式（推荐）→ OpenAI 兼容 API → 阿里云百炼 → Qwen2.5-7B + LoRA
     │
     └── 本地模式 → BaseModel → Qwen2.5 0.5B~7B（需 torch, transformers）
+
+实时 LLM 教练触发生成
+    │
+    └── DetectionThread 每帧 → PoseAnalyzer → RealTimeCoach
+          ├── 触发判断（严重错误/评分骤降/里程碑/个人最佳）
+          ├── 频率控制（全局≥6s，按类型 8-30s 冷却）
+          ├── 构建结构化上下文 → 远程 API → 聊天框主动推送
+          └── 用户提问时自动附带当前训练数据
 ```
 
 **远程模式优势**：无需本地 GPU，百炼托管 GPU 推理，最小实例数 0 自动缩零节省费用。
 
 ---
+
+## 实时 LLM 教练
+
+训练过程中，系统会将每帧的姿态数据（评分、关节角度、检测到的错误、训练统计）编码为结构化上下文，通过远程 API 发送给微调过的 Qwen2.5-7B 健身专家模型。模型会在聊天面板中**主动推送**专业指导。
+
+### 触发规则
+
+| 触发条件 | 冷却时间 | 说明 |
+|---------|---------|------|
+| 严重错误 (severity≥2 持续5帧+) | 8s | 如膝盖内扣、塌腰、关节过伸 |
+| 评分骤降 (比最佳低15分+) | 10s | 动作质量显著下降时提醒 |
+| 个人最佳 (超最佳5分+) | 15s | 突破自我时给予表扬 |
+| 次数里程碑 (5/10/15/20/30/50/100) | 20s | 达到目标次数时鼓励 |
+| 连续标准 10+ 次 | 30s | 长期保持标准姿势时肯定 |
+
+**全局限制**：两次主动推送≥6秒，每会话最多 20 次，防止消息轰炸。
+
+### 用户提问
+
+训练中在聊天框输入问题（如"我的深蹲怎么样？"），系统会自动附带当前训练数据（动作名、次数、总分、最佳分、检测错误），让模型给出结合实时状态的个性化回答。
+
+### 架构
+
+```
+RealTimeCoach
+  ├── CoachContextBuilder   → AnalysisResult → 结构化中文上下文
+  ├── CoachTriggerEvaluator → 触发规则 + 优先级排序
+  └── RealTimeCoach         → 冷却管理 + 频率限制 + API 调用协调
+```
 
 ## 运行测试
 

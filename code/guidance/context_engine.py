@@ -48,6 +48,10 @@ class GuidanceState:
         self.error_counts: dict[str, int] = {}
         self.guidance_history: list[GuidanceMessage] = []
         self.session_start: float = time.time()
+        self.last_proactive_time: float = 0.0
+        self.proactive_count: int = 0
+        self.last_milestone_count: int = 0
+        self.consecutive_error_frames: dict[str, int] = {}
 
     def update(self, result: AnalysisResult):
         """Update state from one analysis frame."""
@@ -59,14 +63,21 @@ class GuidanceState:
         if result.score.total > self.best_score:
             self.best_score = result.score.total
 
+        # Track milestone changes
+        if result.count > self.last_milestone_count:
+            self.last_milestone_count = result.count
+
         if not result.errors:
             self.consecutive_good_form += 1
             self.consecutive_bad_form = 0
+            self.consecutive_error_frames.clear()
         else:
             self.consecutive_bad_form += 1
             self.consecutive_good_form = 0
             for err in result.errors:
                 self.error_counts[err.name] = self.error_counts.get(err.name, 0) + 1
+                self.consecutive_error_frames[err.name] = \
+                    self.consecutive_error_frames.get(err.name, 0) + 1
 
 
 class ContextEngine:
@@ -220,6 +231,28 @@ class ContextEngine:
             f"已完成: {self.state.total_reps}次, "
             f"最佳评分: {self.state.best_score:.0f}分"
         )
+
+    def get_rich_context(self) -> dict:
+        """Return a dict of all guidance state for LLM context building."""
+        recent = self.state.recent_scores[-10:]
+        avg_score = round(sum(recent) / max(1, len(recent)), 1) if recent else 0
+        sorted_errors = sorted(
+            self.state.error_counts.items(), key=lambda x: x[1], reverse=True
+        )
+        return {
+            "total_reps": self.state.total_reps,
+            "best_score": round(self.state.best_score, 1),
+            "recent_avg_score": avg_score,
+            "consecutive_good": self.state.consecutive_good_form,
+            "consecutive_bad": self.state.consecutive_bad_form,
+            "error_counts": dict(sorted_errors),
+            "error_ranking": ", ".join(
+                f"{name}({count}次)" for name, count in sorted_errors[:5]
+            ) if sorted_errors else "无",
+            "last_milestone": self.state.last_milestone,
+            "session_duration": round(time.time() - self.state.session_start, 0),
+            "consecutive_error_frames": dict(self.state.consecutive_error_frames),
+        }
 
     def reset(self):
         self.state = GuidanceState()

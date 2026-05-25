@@ -1,0 +1,33 @@
+<template>
+  <div class="glow-card-strong rounded-[14px] p-4">
+    <div class="flex justify-between items-center mb-3">
+      <span class="text-[10px] uppercase tracking-wider text-flame/80 font-semibold">Score Detail</span>
+      <span class="text-[10px] text-gray-600">第 {{ count }} 次</span>
+    </div>
+    <div class="flex gap-3 justify-center mb-3">
+      <RingGauge :value="score.angle" :max="40" label="角度" color="#ff6a00" />
+      <RingGauge :value="score.temporal" :max="30" label="时序" color="#ee0979" />
+      <RingGauge :value="score.symmetry" :max="30" label="对称" color="#ff6a00" />
+    </div>
+    <div class="grid grid-cols-3 gap-1.5">
+      <div class="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
+        <div class="text-base font-bold">{{ count }}</div>
+        <div class="text-[8px] text-gray-500">总次数</div>
+      </div>
+      <div class="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
+        <div class="text-base font-bold">{{ formattedTime }}</div>
+        <div class="text-[8px] text-gray-500">训练时长</div>
+      </div>
+      <div class="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
+        <div class="text-base font-bold text-danger">{{ errorCount }}</div>
+        <div class="text-[8px] text-gray-500">错误次数</div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import type { ScoreData } from '../types'
+import RingGauge from './RingGauge.vue'
+defineProps<{ score: ScoreData; count: number; formattedTime: string; errorCount: number }>()
+</script>

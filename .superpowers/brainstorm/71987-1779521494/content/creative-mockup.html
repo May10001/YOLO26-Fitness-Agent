@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>YOLO26 Fitness - Creative UI Mockup</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; font-family:-apple-system,BlinkMacSystemFont,sans-serif; color:#fff; overflow:hidden; height:100vh; }
+
+/* Particle background */
+.particle-bg {
+  position:fixed;inset:0;z-index:0;
+  background:radial-gradient(ellipse at 30% 50%, rgba(255,106,0,0.04) 0%, transparent 60%),
+             radial-gradient(ellipse at 70% 80%, rgba(238,9,121,0.03) 0%, transparent 50%);
+}
+.particle { position:absolute;border-radius:50%;animation:float 8s infinite ease-in-out; }
+@keyframes float {
+  0%,100% { transform:translateY(0) scale(1);opacity:0.3; }
+  50% { transform:translateY(-30px) scale(1.2);opacity:0.6; }
+}
+
+/* Page layout */
+.page { position:relative;z-index:1;display:flex;height:100vh;padding:12px;gap:12px; }
+.main { flex:2.2;display:flex;flex-direction:column;gap:12px;position:relative; }
+.sidebar { flex:1;display:flex;flex-direction:column;gap:10px;max-width:360px; }
+
+/* Video container with arc gauges */
+.video-wrapper { flex:1;position:relative; }
+.video-container {
+  width:100%;height:100%;border-radius:16px;overflow:hidden;
+  background:#111;border:1px solid rgba(255,106,0,0.15);
+  box-shadow:0 0 40px rgba(255,106,0,0.08);
+  transition:box-shadow 0.8s, border-color 0.8s;
+}
+.video-container.high-score {
+  border-color:rgba(255,106,0,0.35);
+  box-shadow:0 0 60px rgba(255,106,0,0.15),0 0 120px rgba(238,9,121,0.08);
+}
+.video-placeholder {
+  width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,rgba(255,106,0,0.03),rgba(238,9,121,0.02));
+  font-size:13px;color:#444;
+}
+
+/* Skeleton overlay demo */
+.skeleton-overlay { position:absolute;inset:0;pointer-events:none; }
+.joint {
+  position:absolute;width:14px;height:14px;border-radius:50%;
+  background:radial-gradient(circle,#ff6a00,transparent);
+  box-shadow:0 0 12px rgba(255,106,0,0.6);
+  animation:pulse 2s infinite;
+}
+.joint.error {
+  background:radial-gradient(circle,#ff2d2d,transparent);
+  box-shadow:0 0 16px rgba(255,45,45,0.8);
+  animation:pulse-error 0.6s infinite;
+}
+@keyframes pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.3);} }
+@keyframes pulse-error { 0%,100%{transform:scale(1);} 50%{transform:scale(1.5);} }
+.bone {
+  position:absolute;height:2px;
+  background:linear-gradient(90deg,rgba(255,106,0,0.8),rgba(238,9,121,0.6));
+  box-shadow:0 0 6px rgba(255,106,0,0.4);
+  transform-origin:left center;
+}
+
+/* Arc gauges around video */
+.arc-gauges { position:absolute;top:-8px;left:-8px;right:-8px;bottom:-8px;pointer-events:none; }
+.arc-gauges svg { width:100%;height:100%; }
+.arc-track { fill:none;stroke:rgba(255,255,255,0.05);stroke-width:3; }
+.arc-value { fill:none;stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset 1s; }
+.arc-label {
+  font-size:9px;fill:#888;text-anchor:middle;
+}
+
+/* HUD */
+.video-hud-top { position:absolute;top:16px;left:16px;right:16px;display:flex;justify-content:space-between;align-items:center; }
+.badge-live {
+  background:linear-gradient(135deg,#ff6a00,#ee0979);
+  padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;
+  box-shadow:0 0 15px rgba(255,106,0,0.4);
+  animation:pulse-badge 2s infinite;
+}
+@keyframes pulse-badge { 0%,100%{box-shadow:0 0 15px rgba(255,106,0,0.4);} 50%{box-shadow:0 0 25px rgba(255,106,0,0.7);} }
+.badge-exercise { background:rgba(255,255,255,0.1);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.15);padding:5px 14px;border-radius:20px;font-size:11px; }
+
+/* State indicator */
+.state-badge {
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:11px;color:#ff6a00;text-transform:uppercase;letter-spacing:3px;
+  padding:12px 28px;border:1px solid rgba(255,106,0,0.3);border-radius:30px;
+  background:rgba(0,0,0,0.7);backdrop-filter:blur(10px);
+  animation:breathe 3s infinite;
+}
+@keyframes breathe { 0%,100%{opacity:0.7;transform:translate(-50%,-50%) scale(1);} 50%{opacity:1;transform:translate(-50%,-50%) scale(1.02);} }
+
+/* Controls - ready state */
+.controls {
+  height:56px;display:flex;align-items:center;gap:10px;padding:0 16px;border-radius:12px;
+  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);
+  transition:all 0.6s;
+}
+.btn-primary {
+  background:linear-gradient(135deg,#ff6a00,#ee0979);border:none;color:#fff;
+  padding:10px 24px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;
+  box-shadow:0 0 20px rgba(255,106,0,0.3);transition:all 0.3s;
+}
+.btn-primary:hover { box-shadow:0 0 30px rgba(255,106,0,0.5);transform:scale(1.02); }
+.btn-secondary { background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#aaa;padding:10px 18px;border-radius:10px;font-size:12px;cursor:pointer; }
+.exercise-tabs { display:flex;gap:6px;margin-left:auto; }
+.tab-active { background:linear-gradient(135deg,rgba(255,106,0,0.2),rgba(238,9,121,0.1));border:1px solid rgba(255,106,0,0.3);color:#ff6a00;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:600; }
+.tab-inactive { background:transparent;border:1px solid rgba(255,255,255,0.08);color:#666;padding:6px 12px;border-radius:8px;font-size:11px; }
+</style>
+</head>
+<body>
+<div class="particle-bg">
+  <div class="particle" style="width:4px;height:4px;background:rgba(255,106,0,0.4);top:20%;left:15%;animation-delay:0s;"></div>
+  <div class="particle" style="width:3px;height:3px;background:rgba(238,9,121,0.3);top:60%;left:25%;animation-delay:2s;"></div>
+  <div class="particle" style="width:5px;height:5px;background:rgba(255,106,0,0.3);top:30%;left:75%;animation-delay:4s;"></div>
+  <div class="particle" style="width:3px;height:3px;background:rgba(238,9,121,0.4);top:70%;left:85%;animation-delay:1s;"></div>
+  <div class="particle" style="width:4px;height:4px;background:rgba(255,106,0,0.3);top:80%;left:45%;animation-delay:3s;"></div>
+  <div class="particle" style="width:6px;height:6px;background:rgba(238,9,121,0.2);top:10%;left:55%;animation-delay:5s;"></div>
+  <div class="particle" style="width:3px;height:3px;background:rgba(255,106,0,0.5);top:45%;left:90%;animation-delay:6s;"></div>
+</div>
+<div class="page">
+  <div class="main">
+    <div class="video-wrapper">
+      <div class="video-container high-score">
+        <div class="video-placeholder">
+          <div class="state-badge">READY — 点击开始训练</div>
+        </div>
+        <div class="video-hud-top">
+          <div class="badge-live">LIVE</div>
+          <div class="badge-exercise">深蹲 Squat</div>
+        </div>
+        <!-- Skeleton overlay with glowing joints -->
+        <div class="skeleton-overlay">
+          <div class="joint" style="top:25%;left:50%;"></div>
+          <div class="joint" style="top:35%;left:45%;"></div>
+          <div class="joint" style="top:35%;left:55%;"></div>
+          <div class="joint" style="top:45%;left:42%;"></div>
+          <div class="joint" style="top:45%;left:58%;"></div>
+          <div class="joint" style="top:55%;left:47%;"></div>
+          <div class="joint" style="top:55%;left:53%;"></div>
+          <div class="joint error" style="top:65%;left:45%;"></div>
+          <div class="joint error" style="top:65%;left:55%;"></div>
+          <div class="joint" style="top:75%;left:44%;"></div>
+          <div class="joint" style="top:75%;left:56%;"></div>
+        </div>
+      </div>
+      <!-- Arc gauges -->
+      <div class="arc-gauges">
+        <svg viewBox="0 0 800 600" preserveAspectRatio="none">
+          <!-- Left arc: Angle score -->
+          <path class="arc-track" d="M 30,100 A 200,200 0 0 1 30,500" />
+          <path class="arc-value" d="M 30,100 A 200,200 0 0 1 30,480" stroke="url(#grad1)" stroke-dasharray="380" stroke-dashoffset="30" />
+          <text class="arc-label" x="18" y="310">角度</text>
+          <!-- Right arc: Symmetry -->
+          <path class="arc-track" d="M 770,100 A 200,200 0 0 0 770,500" />
+          <path class="arc-value" d="M 770,100 A 200,200 0 0 0 770,460" stroke="url(#grad2)" stroke-dasharray="360" stroke-dashoffset="40" />
+          <text class="arc-label" x="782" y="310">对称</text>
+          <!-- Bottom arc: Temporal -->
+          <path class="arc-track" d="M 200,585 A 300,300 0 0 1 600,585" />
+          <path class="arc-value" d="M 200,585 A 300,300 0 0 1 560,585" stroke="url(#grad1)" stroke-dasharray="400" stroke-dashoffset="40" />
+          <text class="arc-label" x="400" y="598">时序</text>
+          <defs>
+            <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ff6a00"/>
+              <stop offset="100%" stop-color="#ee0979"/>
+            </linearGradient>
+            <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ee0979"/>
+              <stop offset="100%" stop-color="#ff6a00"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn-primary">开始训练</button>
+      <button class="btn-secondary">暂停</button>
+      <button class="btn-secondary">停止</button>
+      <div class="exercise-tabs">
+        <div class="tab-active">深蹲</div>
+        <div class="tab-inactive">俯卧撑</div>
+        <div class="tab-inactive">平板支撑</div>
+        <div class="tab-inactive">更多</div>
+      </div>
+    </div>
+  </div>
+  <div class="sidebar">
+    <div class="glow-card" style="border-radius:14px;padding:16px;background:linear-gradient(135deg,rgba(255,106,0,0.08),rgba(238,9,121,0.04));border:1px solid rgba(255,106,0,0.15);box-shadow:0 0 25px rgba(255,106,0,0.06),0 0 50px rgba(238,9,121,0.03);transition:all 0.8s;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:rgba(255,106,0,0.7);margin-bottom:8px;font-weight:600;">Training Score</div>
+      <div style="font-size:48px;font-weight:800;background:linear-gradient(90deg,#ff6a00,#ee0979);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1;">92</div>
+      <div style="font-size:11px;color:#555;margin-top:4px;">动作质量 · 实时更新</div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <div style="flex:1;text-align:center;padding:10px 4px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.05);">
+          <div style="font-size:18px;font-weight:700;color:#fff;">38</div>
+          <div style="font-size:9px;color:#666;margin-top:2px;">角度 /40</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:10px 4px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.05);">
+          <div style="font-size:18px;font-weight:700;color:#fff;">27</div>
+          <div style="font-size:9px;color:#666;margin-top:2px;">时序 /30</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:10px 4px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.05);">
+          <div style="font-size:18px;font-weight:700;color:#fff;">27</div>
+          <div style="font-size:9px;color:#666;margin-top:2px;">对称 /30</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-radius:14px;padding:16px;background:linear-gradient(135deg,rgba(255,106,0,0.06),rgba(238,9,121,0.03));border:1px solid rgba(255,106,0,0.12);box-shadow:0 0 20px rgba(255,106,0,0.04);">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:rgba(255,106,0,0.7);margin-bottom:10px;font-weight:600;">Real-time Correction</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:rgba(255,45,45,0.06);border:1px solid rgba(255,45,45,0.15);margin-bottom:6px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:#ff2d2d;box-shadow:0 0 10px rgba(255,45,45,0.6);animation:pulse-error 0.6s infinite;"></div>
+        <div style="font-size:11px;color:#ccc;">膝盖内扣 — 保持膝盖与脚尖方向一致</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:rgba(56,239,125,0.05);border:1px solid rgba(56,239,125,0.12);">
+        <div style="width:8px;height:8px;border-radius:50%;background:#38ef7d;box-shadow:0 0 8px rgba(56,239,125,0.5);"></div>
+        <div style="font-size:11px;color:#ccc;">下蹲深度良好，继续保持</div>
+      </div>
+    </div>
+
+    <div style="flex:1;border-radius:14px;padding:16px;background:linear-gradient(135deg,rgba(255,106,0,0.05),rgba(238,9,121,0.02));border:1px solid rgba(255,106,0,0.1);box-shadow:0 0 15px rgba(255,106,0,0.03);display:flex;flex-direction:column;min-height:0;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:rgba(255,106,0,0.7);margin-bottom:10px;font-weight:600;">AI Coach</div>
+      <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-bottom:8px;">
+        <div style="background:rgba(255,106,0,0.08);border:1px solid rgba(255,106,0,0.12);border-radius:10px;padding:10px 12px;font-size:11px;color:#ddd;max-width:90%;">检测到深蹲练习，整体不错。注意膝盖方向。</div>
+        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 12px;font-size:11px;color:#aaa;max-width:90%;align-self:flex-end;">膝盖内扣怎么改善？</div>
+        <div style="background:rgba(255,106,0,0.08);border:1px solid rgba(255,106,0,0.12);border-radius:10px;padding:10px 12px;font-size:11px;color:#ddd;max-width:90%;">建议热身加入弹力带侧走和蚌式开合，每组15次，激活臀中肌。</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <input style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;font-size:11px;color:#fff;outline:none;" placeholder="问问AI教练...">
+        <button style="background:linear-gradient(135deg,#ff6a00,#ee0979);border:none;color:#fff;width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:14px;box-shadow:0 0 12px rgba(255,106,0,0.3);">→</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

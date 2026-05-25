@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Arc Gauge V2 - Thick Segmented Glow</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; font-family:-apple-system,BlinkMacSystemFont,sans-serif; color:#fff; height:100vh; overflow:hidden; }
+.page { display:flex; height:100vh; padding:12px; gap:12px; }
+.main { flex:2.2; display:flex; flex-direction:column; gap:10px; }
+.sidebar { flex:1; max-width:380px; display:flex; align-items:center; justify-content:center; font-size:12px; color:#444; }
+
+.video-wrapper { flex:1; position:relative; }
+.video-box {
+  width:100%;height:100%;border-radius:16px;overflow:hidden;
+  background:#111;border:1px solid rgba(255,106,0,0.25);
+  box-shadow:0 0 50px rgba(255,106,0,0.1);
+}
+.video-inner {
+  width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,rgba(255,106,0,0.03),rgba(238,9,121,0.02));
+  font-size:13px;color:#333;
+}
+
+.arc-system { position:absolute;inset:-20px;pointer-events:none; }
+.arc-system svg { width:100%;height:100%; }
+
+/* HUD */
+.hud-bottom { position:absolute;bottom:14px;right:14px; }
+.hud-score { background:rgba(0,0,0,0.7);backdrop-filter:blur(10px);border:1px solid rgba(255,106,0,0.2);border-radius:12px;padding:8px 16px;text-align:center; }
+.hud-score-num { font-size:30px;font-weight:800;background:linear-gradient(90deg,#ff6a00,#ee0979);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1; }
+.hud-score-label { font-size:9px;color:#666;margin-top:2px; }
+
+.controls { height:44px;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05); }
+.btn-s { background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#aaa;padding:7px 14px;border-radius:8px;font-size:10px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="main">
+    <div class="video-wrapper">
+      <div class="video-box">
+        <div class="video-inner">[ 摄像头画面 ]</div>
+        <div class="hud-bottom">
+          <div class="hud-score">
+            <div class="hud-score-num">87</div>
+            <div class="hud-score-label">TOTAL</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arc-system">
+        <svg viewBox="0 0 1000 700" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="g1" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#ff6a00"/>
+              <stop offset="100%" stop-color="#ee0979"/>
+            </linearGradient>
+            <linearGradient id="g2" x1="0%" y1="100%" x2="0%" y2="0%">
+              <stop offset="0%" stop-color="#ee0979"/>
+              <stop offset="100%" stop-color="#ff6a00"/>
+            </linearGradient>
+            <linearGradient id="g3" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ff6a00"/>
+              <stop offset="100%" stop-color="#ee0979"/>
+            </linearGradient>
+            <filter id="glow1">
+              <feGaussianBlur stdDeviation="4" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="glow2">
+              <feGaussianBlur stdDeviation="6" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- LEFT ARC: ANGLE 36/40 = 90% (9 of 10 segments lit) -->
+          <!-- Track segments (10 total) -->
+          <path d="M 18,95 Q 6,115 14,138" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 12,155 Q 4,178 8,202" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 7,220 Q 2,245 4,270" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 4,288 Q 2,312 3,338" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 3,356 Q 2,380 3,405" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 3,423 Q 4,448 7,472" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 8,490 Q 12,514 16,536" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 17,553 Q 22,574 28,594" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 30,608 Q 36,626 42,642" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 44,655 Q 50,670 56,682" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+
+          <!-- Lit segments (9 of 10) -->
+          <path d="M 18,95 Q 6,115 14,138" fill="none" stroke="url(#g1)" stroke-width="12" stroke-linecap="round" filter="url(#glow2)"/>
+          <path d="M 12,155 Q 4,178 8,202" fill="none" stroke="url(#g1)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 7,220 Q 2,245 4,270" fill="none" stroke="url(#g1)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 4,288 Q 2,312 3,338" fill="none" stroke="url(#g1)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 3,356 Q 2,380 3,405" fill="none" stroke="url(#g1)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 3,423 Q 4,448 7,472" fill="none" stroke="url(#g1)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 8,490 Q 12,514 16,536" fill="none" stroke="url(#g1)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 17,553 Q 22,574 28,594" fill="none" stroke="url(#g1)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 30,608 Q 36,626 42,642" fill="none" stroke="url(#g1)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <!-- 10th segment stays dark (unlit) -->
+
+          <!-- Label -->
+          <text x="38" y="82" font-size="12" fill="#ff6a00" font-weight="700">角度</text>
+          <text x="38" y="96" font-size="10" fill="#666">36/40</text>
+
+          <!-- RIGHT ARC: SYMMETRY 26/30 = 87% (8.7 → 9 of 10 segments) -->
+          <path d="M 982,95 Q 994,115 986,138" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 988,155 Q 996,178 992,202" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 993,220 Q 998,245 996,270" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 996,288 Q 998,312 997,338" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 997,356 Q 998,380 997,405" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 997,423 Q 996,448 993,472" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 992,490 Q 988,514 984,536" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 983,553 Q 978,574 972,594" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 970,608 Q 964,626 958,642" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 956,655 Q 950,670 944,682" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+
+          <!-- Lit segments (9 of 10) -->
+          <path d="M 982,95 Q 994,115 986,138" fill="none" stroke="url(#g2)" stroke-width="12" stroke-linecap="round" filter="url(#glow2)"/>
+          <path d="M 988,155 Q 996,178 992,202" fill="none" stroke="url(#g2)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 993,220 Q 998,245 996,270" fill="none" stroke="url(#g2)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 996,288 Q 998,312 997,338" fill="none" stroke="url(#g2)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 997,356 Q 998,380 997,405" fill="none" stroke="url(#g2)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 997,423 Q 996,448 993,472" fill="none" stroke="url(#g2)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 992,490 Q 988,514 984,536" fill="none" stroke="url(#g2)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 983,553 Q 978,574 972,594" fill="none" stroke="url(#g2)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 970,608 Q 964,626 958,642" fill="none" stroke="url(#g2)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+
+          <text x="940" y="82" font-size="12" fill="#ee0979" font-weight="700" text-anchor="end">对称</text>
+          <text x="940" y="96" font-size="10" fill="#666" text-anchor="end">26/30</text>
+
+          <!-- BOTTOM ARC: TEMPORAL 25/30 = 83% (8 of 10 segments) -->
+          <path d="M 160,688 Q 200,692 240,690" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 265,689 Q 305,690 345,689" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 370,688 Q 410,688 450,687" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 475,687 Q 515,687 555,687" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 580,687 Q 620,688 660,688" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 685,689 Q 725,690 765,692" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 115,690 Q 125,689 135,689" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+          <path d="M 790,692 Q 830,694 870,696" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="12" stroke-linecap="round"/>
+
+          <!-- Lit (8 of 10) -->
+          <path d="M 160,688 Q 200,692 240,690" fill="none" stroke="url(#g3)" stroke-width="12" stroke-linecap="round" filter="url(#glow2)"/>
+          <path d="M 265,689 Q 305,690 345,689" fill="none" stroke="url(#g3)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 370,688 Q 410,688 450,687" fill="none" stroke="url(#g3)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 475,687 Q 515,687 555,687" fill="none" stroke="url(#g3)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 580,687 Q 620,688 660,688" fill="none" stroke="url(#g3)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 685,689 Q 725,690 765,692" fill="none" stroke="url(#g3)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 115,690 Q 125,689 135,689" fill="none" stroke="url(#g3)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+          <path d="M 790,692 Q 830,694 870,696" fill="none" stroke="url(#g3)" stroke-width="12" stroke-linecap="round" filter="url(#glow1)"/>
+
+          <text x="90" y="694" font-size="12" fill="#ff6a00" font-weight="700">时序</text>
+          <text x="900" y="694" font-size="10" fill="#666">25/30</text>
+        </svg>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="btn-s">停止</div>
+      <div class="btn-s">暂停</div>
+    </div>
+  </div>
+  <div class="sidebar">[ 右侧面板省略 — 聚焦看弧形仪表 ]</div>
+</div>
+</body>
+</html>

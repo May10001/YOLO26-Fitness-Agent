@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Arc Gauge V4 - Thicker Inside Video</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; font-family:-apple-system,BlinkMacSystemFont,sans-serif; color:#fff; height:100vh; overflow:hidden; }
+.page { display:flex; height:100vh; padding:12px; gap:12px; }
+.main { flex:2.2; display:flex; flex-direction:column; gap:10px; }
+.sidebar { flex:1; max-width:380px; display:flex; align-items:center; justify-content:center; font-size:12px; color:#444; }
+
+.video-wrapper { flex:1; position:relative; }
+.video-box {
+  width:100%;height:100%;border-radius:16px;overflow:hidden;position:relative;
+  background:#111;
+  border:1px solid rgba(255,106,0,0.25);
+  box-shadow:0 0 50px rgba(255,106,0,0.1);
+}
+.video-inner {
+  width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,rgba(255,106,0,0.03),rgba(238,9,121,0.02));
+  font-size:13px;color:#333;
+}
+
+/* Arcs inside video */
+.arc-overlay { position:absolute;inset:0;pointer-events:none; }
+.arc-overlay svg { width:100%;height:100%; }
+
+.hud-score {
+  position:absolute; bottom:20px; right:20px;
+  background:rgba(0,0,0,0.7); backdrop-filter:blur(10px);
+  border:1px solid rgba(255,106,0,0.25); border-radius:12px;
+  padding:10px 18px; text-align:center;
+}
+.hud-score-num { font-size:32px; font-weight:800; background:linear-gradient(90deg,#ff6a00,#ee0979); -webkit-background-clip:text; -webkit-text-fill-color:transparent; line-height:1; }
+.hud-score-label { font-size:9px; color:#666; margin-top:2px; }
+
+.hud-top { position:absolute;top:16px;left:16px;display:flex;gap:8px; }
+.badge { background:rgba(0,0,0,0.6);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.1);padding:4px 10px;border-radius:14px;font-size:10px;color:#ccc; }
+.badge-live { background:linear-gradient(135deg,#ff6a00,#ee0979);border:none;color:#fff;font-weight:700;box-shadow:0 0 12px rgba(255,106,0,0.4); }
+
+.controls { height:44px;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05); }
+.btn-s { background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#aaa;padding:7px 14px;border-radius:8px;font-size:10px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="main">
+    <div class="video-wrapper">
+      <div class="video-box">
+        <div class="video-inner">[ 摄像头画面 + 骨骼叠加 ]</div>
+
+        <!-- HUD -->
+        <div class="hud-top">
+          <div class="badge badge-live">REC</div>
+          <div class="badge">深蹲 Squat</div>
+          <div class="badge">下蹲中</div>
+        </div>
+        <div class="hud-score">
+          <div class="hud-score-num">87</div>
+          <div class="hud-score-label">TOTAL</div>
+        </div>
+
+        <!-- Arc gauges INSIDE the video -->
+        <div class="arc-overlay">
+          <svg viewBox="0 0 1000 700" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="g1" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#ff6a00"/>
+                <stop offset="100%" stop-color="#ee0979"/>
+              </linearGradient>
+              <linearGradient id="g2" x1="0%" y1="100%" x2="0%" y2="0%">
+                <stop offset="0%" stop-color="#ff6a00"/>
+                <stop offset="100%" stop-color="#ee0979"/>
+              </linearGradient>
+              <linearGradient id="g3" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#ff6a00"/>
+                <stop offset="100%" stop-color="#ee0979"/>
+              </linearGradient>
+              <filter id="glow">
+                <feGaussianBlur stdDeviation="3" result="b"/>
+                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+            </defs>
+
+            <!-- LEFT ARC: Angle 36/40 = 90% -->
+            <path d="M 24,60 C 14,200 14,500 24,640" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10" stroke-linecap="round"/>
+            <path d="M 24,60 C 14,200 14,460 22,582" fill="none" stroke="url(#g1)" stroke-width="10" stroke-linecap="round" filter="url(#glow)"/>
+            <text x="36" y="52" font-size="11" fill="#ff6a00" font-weight="600">角度</text>
+            <text x="36" y="66" font-size="9" fill="#888">36/40</text>
+
+            <!-- RIGHT ARC: Symmetry 26/30 = 87% -->
+            <path d="M 976,60 C 986,200 986,500 976,640" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10" stroke-linecap="round"/>
+            <path d="M 976,60 C 986,200 986,460 978,564" fill="none" stroke="url(#g2)" stroke-width="10" stroke-linecap="round" filter="url(#glow)"/>
+            <text x="964" y="52" font-size="11" fill="#ee0979" font-weight="600" text-anchor="end">对称</text>
+            <text x="964" y="66" font-size="9" fill="#888" text-anchor="end">26/30</text>
+
+            <!-- BOTTOM ARC: Temporal 25/30 = 83% -->
+            <path d="M 60,676 C 300,690 700,690 940,676" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10" stroke-linecap="round"/>
+            <path d="M 60,676 C 280,690 580,690 790,680" fill="none" stroke="url(#g3)" stroke-width="10" stroke-linecap="round" filter="url(#glow)"/>
+            <text x="60" y="666" font-size="11" fill="#ff6a00" font-weight="600">时序</text>
+            <text x="90" y="666" font-size="9" fill="#888">25/30</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="btn-s">停止</div>
+      <div class="btn-s">暂停</div>
+    </div>
+  </div>
+  <div class="sidebar">[ 右侧面板省略 — 聚焦看弧形仪表 ]</div>
+</div>
+</body>
+</html>

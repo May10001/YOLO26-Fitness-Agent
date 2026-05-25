@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>YOLO26 Fitness - Full Dashboard</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif; color:#fff; height:100vh; overflow:hidden; }
+
+.page { display:flex; height:100vh; padding:12px; gap:12px; }
+.main { flex:2.2; display:flex; flex-direction:column; gap:10px; }
+.sidebar { flex:1; display:flex; flex-direction:column; gap:10px; max-width:360px; }
+
+/* Video container */
+.video-box {
+  flex:1; border-radius:16px; overflow:hidden; position:relative;
+  background:#111;
+  border:1px solid rgba(255,106,0,0.2);
+  box-shadow:0 0 50px rgba(255,106,0,0.08);
+}
+.video-inner {
+  width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,rgba(255,106,0,0.03),rgba(238,9,121,0.02));
+  font-size:13px;color:#333;
+}
+
+/* Gauge bars inside video - CSS based, uniform thickness */
+.gauge-bar {
+  position:absolute; border-radius:6px;
+}
+.gauge-bar-track {
+  background:rgba(255,255,255,0.06);
+}
+.gauge-bar-value {
+  border-radius:6px;
+  box-shadow:0 0 12px rgba(255,106,0,0.4), 0 0 24px rgba(255,106,0,0.2);
+}
+/* Left gauge */
+.gauge-left-track {
+  left:10px; top:50px; bottom:50px; width:10px;
+}
+.gauge-left-value {
+  position:absolute; left:10px; top:50px; width:10px;
+  height:calc((100% - 100px) * 0.9); /* 90% = 36/40 */
+  background:linear-gradient(180deg, #ff6a00, #ee0979);
+  box-shadow:0 0 14px rgba(255,106,0,0.5), 0 0 28px rgba(238,9,121,0.2);
+}
+/* Right gauge */
+.gauge-right-track {
+  right:10px; top:50px; bottom:50px; width:10px;
+}
+.gauge-right-value {
+  position:absolute; right:10px; top:50px; width:10px;
+  height:calc((100% - 100px) * 0.87); /* 87% = 26/30 */
+  background:linear-gradient(180deg, #ee0979, #ff6a00);
+  box-shadow:0 0 14px rgba(238,9,121,0.5), 0 0 28px rgba(255,106,0,0.2);
+}
+/* Bottom gauge */
+.gauge-bottom-track {
+  left:50px; right:50px; bottom:10px; height:10px;
+}
+.gauge-bottom-value {
+  position:absolute; left:50px; bottom:10px; height:10px;
+  width:calc((100% - 100px) * 0.83); /* 83% = 25/30 */
+  background:linear-gradient(90deg, #ff6a00, #ee0979);
+  box-shadow:0 0 14px rgba(255,106,0,0.5), 0 0 28px rgba(238,9,121,0.2);
+}
+
+/* Gauge labels */
+.gauge-label {
+  position:absolute; font-size:10px; font-weight:600;
+}
+.gauge-label span { display:block; font-size:9px; color:#888; font-weight:400; }
+
+/* HUD */
+.hud-top { position:absolute;top:14px;left:30px;display:flex;gap:8px;align-items:center; }
+.badge { background:rgba(0,0,0,0.6);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.1);padding:4px 10px;border-radius:14px;font-size:10px;color:#ccc; }
+.badge-live { background:linear-gradient(135deg,#ff6a00,#ee0979);border:none;color:#fff;font-weight:700;box-shadow:0 0 12px rgba(255,106,0,0.4); }
+
+.hud-score {
+  position:absolute; bottom:30px; right:30px;
+  background:rgba(0,0,0,0.75); backdrop-filter:blur(10px);
+  border:1px solid rgba(255,106,0,0.25); border-radius:12px;
+  padding:10px 18px; text-align:center;
+}
+.hud-score-num { font-size:30px; font-weight:800; background:linear-gradient(90deg,#ff6a00,#ee0979); -webkit-background-clip:text; -webkit-text-fill-color:transparent; line-height:1; }
+.hud-score-label { font-size:9px; color:#666; margin-top:2px; }
+
+.hud-stats { position:absolute;bottom:46px;left:30px;display:flex;gap:6px; }
+.hud-stat { background:rgba(0,0,0,0.6);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.06);padding:5px 10px;border-radius:8px;font-size:10px;color:#999; }
+.hud-stat b { color:#ff6a00; }
+
+/* Controls */
+.controls {
+  height:48px;display:flex;align-items:center;gap:8px;padding:0 14px;border-radius:10px;
+  background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);
+}
+.btn-stop { background:rgba(255,45,45,0.12);border:1px solid rgba(255,45,45,0.25);color:#ff4d4d;padding:8px 16px;border-radius:8px;font-size:11px;font-weight:600; }
+.btn-pause { background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#aaa;padding:8px 16px;border-radius:8px;font-size:11px; }
+.exercise-tabs { display:flex;gap:5px;margin-left:auto; }
+.tab-on { background:linear-gradient(135deg,rgba(255,106,0,0.2),rgba(238,9,121,0.1));border:1px solid rgba(255,106,0,0.3);color:#ff6a00;padding:5px 11px;border-radius:7px;font-size:10px;font-weight:600; }
+.tab-off { border:1px solid rgba(255,255,255,0.07);color:#555;padding:5px 11px;border-radius:7px;font-size:10px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="main">
+    <div class="video-box">
+      <div class="video-inner">[ 摄像头画面 + 骨骼发光叠加 ]</div>
+
+      <!-- Gauge tracks (background) -->
+      <div class="gauge-bar gauge-bar-track gauge-left-track"></div>
+      <div class="gauge-bar gauge-bar-track gauge-right-track"></div>
+      <div class="gauge-bar gauge-bar-track gauge-bottom-track"></div>
+
+      <!-- Gauge values (lit portion) -->
+      <div class="gauge-bar gauge-bar-value gauge-left-value"></div>
+      <div class="gauge-bar gauge-bar-value gauge-right-value"></div>
+      <div class="gauge-bar gauge-bar-value gauge-bottom-value"></div>
+
+      <!-- Gauge labels -->
+      <div class="gauge-label" style="left:26px;top:38px;color:#ff6a00;">角度<span>36/40</span></div>
+      <div class="gauge-label" style="right:26px;top:38px;color:#ee0979;text-align:right;">对称<span>26/30</span></div>
+      <div class="gauge-label" style="left:30px;bottom:26px;color:#ff6a00;">时序 <span style="display:inline;font-size:9px;color:#888;">25/30</span></div>
+
+      <!-- HUD -->
+      <div class="hud-top">
+        <div class="badge badge-live">REC</div>
+        <div class="badge">深蹲 Squat</div>
+        <div class="badge">下蹲中</div>
+      </div>
+      <div class="hud-stats">
+        <div class="hud-stat">次数 <b>12</b></div>
+        <div class="hud-stat">时长 <b>4:18</b></div>
+        <div class="hud-stat">FPS <b>31</b></div>
+      </div>
+      <div class="hud-score">
+        <div class="hud-score-num">87</div>
+        <div class="hud-score-label">TOTAL</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="btn-stop">停止</div>
+      <div class="btn-pause">暂停</div>
+      <div class="exercise-tabs">
+        <div class="tab-on">深蹲</div>
+        <div class="tab-off">俯卧撑</div>
+        <div class="tab-off">平板支撑</div>
+        <div class="tab-off">卷腹</div>
+        <div class="tab-off">开合跳</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <!-- Score card -->
+    <div style="border-radius:14px;padding:16px;background:linear-gradient(135deg,rgba(255,106,0,0.1),rgba(238,9,121,0.05));border:1px solid rgba(255,106,0,0.2);box-shadow:0 0 30px rgba(255,106,0,0.08);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:rgba(255,106,0,0.8);font-weight:600;">Score Detail</div>
+        <div style="font-size:10px;color:#555;">第 12 次</div>
+      </div>
+      <div style="display:flex;gap:12px;justify-content:center;margin-bottom:14px;">
+        <div style="text-align:center;">
+          <svg width="58" height="58" viewBox="0 0 58 58">
+            <circle cx="29" cy="29" r="23" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
+            <circle cx="29" cy="29" r="23" fill="none" stroke="#ff6a00" stroke-width="5" stroke-linecap="round" stroke-dasharray="144.5" stroke-dashoffset="14.5" transform="rotate(-90 29 29)" style="filter:drop-shadow(0 0 4px rgba(255,106,0,0.5))"/>
+            <text x="29" y="33" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">36</text>
+          </svg>
+          <div style="font-size:9px;color:#888;margin-top:2px;">角度 /40</div>
+        </div>
+        <div style="text-align:center;">
+          <svg width="58" height="58" viewBox="0 0 58 58">
+            <circle cx="29" cy="29" r="23" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
+            <circle cx="29" cy="29" r="23" fill="none" stroke="#ee0979" stroke-width="5" stroke-linecap="round" stroke-dasharray="144.5" stroke-dashoffset="24.6" transform="rotate(-90 29 29)" style="filter:drop-shadow(0 0 4px rgba(238,9,121,0.5))"/>
+            <text x="29" y="33" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">25</text>
+          </svg>
+          <div style="font-size:9px;color:#888;margin-top:2px;">时序 /30</div>
+        </div>
+        <div style="text-align:center;">
+          <svg width="58" height="58" viewBox="0 0 58 58">
+            <circle cx="29" cy="29" r="23" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
+            <circle cx="29" cy="29" r="23" fill="none" stroke="#ff6a00" stroke-width="5" stroke-linecap="round" stroke-dasharray="144.5" stroke-dashoffset="18.8" transform="rotate(-90 29 29)" style="filter:drop-shadow(0 0 4px rgba(255,106,0,0.4))"/>
+            <text x="29" y="33" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">26</text>
+          </svg>
+          <div style="font-size:9px;color:#888;margin-top:2px;">对称 /30</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+        <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px;text-align:center;border:1px solid rgba(255,255,255,0.04);">
+          <div style="font-size:16px;font-weight:700;color:#fff;">12</div>
+          <div style="font-size:8px;color:#666;">总次数</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px;text-align:center;border:1px solid rgba(255,255,255,0.04);">
+          <div style="font-size:16px;font-weight:700;color:#fff;">4:18</div>
+          <div style="font-size:8px;color:#666;">训练时长</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px;text-align:center;border:1px solid rgba(255,255,255,0.04);">
+          <div style="font-size:16px;font-weight:700;color:#ff4d4d;">3</div>
+          <div style="font-size:8px;color:#666;">错误次数</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Correction card -->
+    <div style="border-radius:14px;padding:14px;background:linear-gradient(135deg,rgba(255,106,0,0.06),rgba(238,9,121,0.03));border:1px solid rgba(255,106,0,0.12);box-shadow:0 0 20px rgba(255,106,0,0.04);">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:rgba(255,106,0,0.7);margin-bottom:10px;font-weight:600;">Correction</div>
+      <div style="display:flex;align-items:flex-start;gap:10px;padding:10px;border-radius:10px;background:rgba(255,45,45,0.06);border:1px solid rgba(255,45,45,0.15);margin-bottom:6px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:#ff4d4d;box-shadow:0 0 10px rgba(255,77,77,0.6);margin-top:3px;flex-shrink:0;"></div>
+        <div><div style="font-size:11px;color:#eee;font-weight:500;">膝盖内扣</div><div style="font-size:10px;color:#888;margin-top:2px;">保持膝盖与脚尖方向一致</div></div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px;padding:10px;border-radius:10px;background:rgba(56,239,125,0.04);border:1px solid rgba(56,239,125,0.12);">
+        <div style="width:8px;height:8px;border-radius:50%;background:#38ef7d;box-shadow:0 0 8px rgba(56,239,125,0.5);margin-top:3px;flex-shrink:0;"></div>
+        <div><div style="font-size:11px;color:#eee;font-weight:500;">下蹲深度良好</div><div style="font-size:10px;color:#888;margin-top:2px;">髋关节低于膝关节，继续保持</div></div>
+      </div>
+    </div>
+
+    <!-- AI Coach card -->
+    <div style="flex:1;border-radius:14px;padding:14px;background:linear-gradient(135deg,rgba(255,106,0,0.04),rgba(238,9,121,0.02));border:1px solid rgba(255,106,0,0.08);display:flex;flex-direction:column;min-height:0;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:rgba(255,106,0,0.7);margin-bottom:8px;font-weight:600;">AI Coach</div>
+      <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+        <div style="background:rgba(255,106,0,0.08);border:1px solid rgba(255,106,0,0.12);border-radius:10px;padding:9px 11px;font-size:10px;color:#ddd;max-width:92%;">检测到深蹲练习，整体动作质量不错，注意膝盖方向。</div>
+        <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:9px 11px;font-size:10px;color:#aaa;max-width:85%;align-self:flex-end;">膝盖内扣怎么改善？</div>
+        <div style="background:rgba(255,106,0,0.08);border:1px solid rgba(255,106,0,0.12);border-radius:10px;padding:9px 11px;font-size:10px;color:#ddd;max-width:92%;">建议热身加入弹力带侧走和蚌式开合，每组15次，有效激活臀中肌。</div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <input style="flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 12px;font-size:10px;color:#fff;outline:none;" placeholder="问问AI教练...">
+        <button style="background:linear-gradient(135deg,#ff6a00,#ee0979);border:none;color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:12px;box-shadow:0 0 10px rgba(255,106,0,0.3);">→</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

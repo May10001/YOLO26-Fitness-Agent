@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Arc Gauge V3 - Proper Segmented Glow</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; font-family:-apple-system,BlinkMacSystemFont,sans-serif; color:#fff; height:100vh; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+
+.container { width:90vw; height:85vh; position:relative; }
+
+.video-box {
+  position:absolute; inset:40px;
+  border-radius:16px; overflow:hidden;
+  background:#111;
+  border:1px solid rgba(255,106,0,0.2);
+  box-shadow:0 0 50px rgba(255,106,0,0.08);
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px; color:#333;
+}
+
+.hud-score {
+  position:absolute; bottom:54px; right:54px;
+  background:rgba(0,0,0,0.75); backdrop-filter:blur(10px);
+  border:1px solid rgba(255,106,0,0.25); border-radius:12px;
+  padding:10px 18px; text-align:center;
+}
+.hud-score-num { font-size:34px; font-weight:800; background:linear-gradient(90deg,#ff6a00,#ee0979); -webkit-background-clip:text; -webkit-text-fill-color:transparent; line-height:1; }
+.hud-score-label { font-size:9px; color:#666; margin-top:3px; }
+
+/* Arc gauge wrapper */
+.gauge-left, .gauge-right, .gauge-bottom { position:absolute; }
+.gauge-left { left:0; top:40px; bottom:40px; width:40px; }
+.gauge-right { right:0; top:40px; bottom:40px; width:40px; }
+.gauge-bottom { bottom:0; left:40px; right:40px; height:40px; }
+
+.gauge-left svg, .gauge-right svg, .gauge-bottom svg { width:100%; height:100%; }
+
+/* Labels */
+.gauge-label {
+  position:absolute; font-size:11px; font-weight:700;
+}
+.gauge-sublabel { font-size:10px; color:#666; font-weight:400; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="video-box">
+    [ 摄像头画面 + 骨骼叠加 ]
+    <div class="hud-score">
+      <div class="hud-score-num">87</div>
+      <div class="hud-score-label">TOTAL</div>
+    </div>
+  </div>
+
+  <!-- LEFT GAUGE: Angle 36/40 -->
+  <div class="gauge-left">
+    <svg viewBox="0 0 40 600" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="gl" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#ff6a00"/>
+          <stop offset="100%" stop-color="#ee0979"/>
+        </linearGradient>
+        <filter id="glowL"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <!-- Track: full arc, segmented via dasharray -->
+      <line x1="20" y1="20" x2="20" y2="580" stroke="rgba(255,255,255,0.06)" stroke-width="14" stroke-linecap="round" stroke-dasharray="42 14"/>
+      <!-- Value: 90% of 560px = 504px lit -->
+      <line x1="20" y1="20" x2="20" y2="524" stroke="url(#gl)" stroke-width="14" stroke-linecap="round" stroke-dasharray="42 14" filter="url(#glowL)"/>
+    </svg>
+    <div class="gauge-label" style="top:-4px;left:0;color:#ff6a00;">角度<br><span class="gauge-sublabel">36/40</span></div>
+  </div>
+
+  <!-- RIGHT GAUGE: Symmetry 26/30 -->
+  <div class="gauge-right">
+    <svg viewBox="0 0 40 600" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="gr" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#ee0979"/>
+          <stop offset="100%" stop-color="#ff6a00"/>
+        </linearGradient>
+        <filter id="glowR"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <line x1="20" y1="20" x2="20" y2="580" stroke="rgba(255,255,255,0.06)" stroke-width="14" stroke-linecap="round" stroke-dasharray="42 14"/>
+      <!-- 87% of 560 = 487px -->
+      <line x1="20" y1="20" x2="20" y2="507" stroke="url(#gr)" stroke-width="14" stroke-linecap="round" stroke-dasharray="42 14" filter="url(#glowR)"/>
+    </svg>
+    <div class="gauge-label" style="top:-4px;right:0;color:#ee0979;text-align:right;">对称<br><span class="gauge-sublabel">26/30</span></div>
+  </div>
+
+  <!-- BOTTOM GAUGE: Temporal 25/30 -->
+  <div class="gauge-bottom">
+    <svg viewBox="0 0 800 40" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="gb" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#ff6a00"/>
+          <stop offset="100%" stop-color="#ee0979"/>
+        </linearGradient>
+        <filter id="glowB"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <line x1="20" y1="20" x2="780" y2="20" stroke="rgba(255,255,255,0.06)" stroke-width="14" stroke-linecap="round" stroke-dasharray="56 16"/>
+      <!-- 83% of 760 = 631px -->
+      <line x1="20" y1="20" x2="651" y2="20" stroke="url(#gb)" stroke-width="14" stroke-linecap="round" stroke-dasharray="56 16" filter="url(#glowB)"/>
+    </svg>
+    <div class="gauge-label" style="bottom:12px;left:-36px;color:#ff6a00;">时序 <span class="gauge-sublabel">25/30</span></div>
+  </div>
+</div>
+</body>
+</html>

@@ -49,13 +49,6 @@ from code.visualization import JointAngleHeatmap
 from code.coach_system_prompt import COACH_SYSTEM_PROMPT, COACH_SYSTEM_PROMPT_PROACTIVE
 from code.realtime_coach import RealTimeCoach
 
-try:
-    from code.models.base_model import BaseModel
-    _BASE_MODEL_AVAILABLE = True
-except ImportError:
-    _BASE_MODEL_AVAILABLE = False
-    BaseModel = None
-
 
 # ============================================================================
 # 常量定义
@@ -64,10 +57,6 @@ except ImportError:
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL_PATH = BASE_DIR / "yolo26n-pose.pt"
 HISTORY_DIR = BASE_DIR / "data" / "training_history"
-
-# Model size options for the chat assistant (mirrors BaseModel.MODEL_VARIANTS)
-CHAT_MODEL_SIZES = ["0.5B", "1.5B", "3B", "7B"]
-CHAT_DEFAULT_MODEL_SIZE = "0.5B"
 
 KEYPOINT_NAMES = [
     "nose", "left_eye", "right_eye", "left_ear", "right_ear",
@@ -117,7 +106,7 @@ CHAT_SYSTEM_PROMPT = (
 )
 
 CHAT_WELCOME = (
-    "🏋️ 你好！我是你的AI健身助手，基于本地 Qwen2.5。\n"
+    "🏋️ 你好！我是你的AI健身助手，基于 DashScope 云端 Qwen2.5-7B。\n"
     "我可以帮你：\n"
     "  · 指导动作要领，纠正错误姿势\n"
     "  · 制定个性化训练计划\n"
@@ -482,13 +471,9 @@ class WorkoutApp:
         self.session_start: float = 0.0
         self._session_scores: list = []
 
-        # 聊天
+        # 聊天 — 全部使用远程 DashScope API
         self.chat_initialized = False
         self.chat_processing = False
-        self.chat_model_size = tk.StringVar(value=CHAT_DEFAULT_MODEL_SIZE)
-        self.chat_lora_path = tk.StringVar(value="")
-        # 远程 API 模式
-        self.chat_use_remote = tk.BooleanVar(value=False)
         self.chat_api_key = tk.StringVar(value="")
         self.chat_model_code = tk.StringVar(value="")
         self._load_api_config()
@@ -556,72 +541,103 @@ class WorkoutApp:
         self._build_chat_panel(main)
 
     def _build_control_panel(self, parent):
-        cp = ttk.Frame(parent, style="Panel.TFrame", padding=14)
+        cp = ttk.Frame(parent, style="Panel.TFrame")
         cp.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 0))
         cp.configure(width=340)
         cp.pack_propagate(False)
 
-        ttk.Label(cp, text="YOLO26 健身教练", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(cp, text="实时姿态检测 · 动作评分 · AI指导", style="Panel.TLabel").pack(anchor="w", pady=(2, 14))
+        # Scrollable canvas + inner frame
+        canvas = tk.Canvas(cp, bg="#ffffff", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(cp, orient=tk.VERTICAL, command=canvas.yview)
+        sf = ttk.Frame(canvas, style="Panel.TFrame", padding=14)
+
+        window_id = canvas.create_window((0, 0), window=sf, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        def _on_canvas_configure(event):
+            canvas.itemconfig(window_id, width=event.width)
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        def _on_frame_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        sf.bind("<Configure>", _on_frame_configure)
+
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def _bind_mousewheel(event):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        def _unbind_mousewheel(event):
+            canvas.unbind_all("<MouseWheel>")
+
+        canvas.bind("<Enter>", _bind_mousewheel)
+        canvas.bind("<Leave>", _unbind_mousewheel)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        ttk.Label(sf, text="YOLO26 健身教练", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(sf, text="实时姿态检测 · 动作评分 · AI指导", style="Panel.TLabel").pack(anchor="w", pady=(2, 14))
 
         # 核心指标卡片
-        grid = ttk.Frame(cp, style="Panel.TFrame")
+        grid = ttk.Frame(sf, style="Panel.TFrame")
         grid.pack(fill=tk.X)
         self._card(grid, "次数", self.count_text, "Count.TLabel", 0, 0)
         self._card(grid, "阶段", self.phase_text, "Panel.TLabel", 0, 1)
         self._card(grid, "角度/状态", self.metric_text, "Panel.TLabel", 1, 0)
         self._card(grid, "FPS", self.fps_text, "Panel.TLabel", 1, 1)
 
-        ttk.Separator(cp).pack(fill=tk.X, pady=10)
+        ttk.Separator(sf).pack(fill=tk.X, pady=10)
 
         # 评分区域
-        ttk.Label(cp, text="动作评分 (0-100)", style="Panel.TLabel",
+        ttk.Label(sf, text="动作评分 (0-100)", style="Panel.TLabel",
                   font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
-        score_row = ttk.Frame(cp, style="Panel.TFrame")
+        score_row = ttk.Frame(sf, style="Panel.TFrame")
         score_row.pack(fill=tk.X, pady=(4, 0))
         ttk.Label(score_row, textvariable=self.score_text, style="Score.TLabel").pack(side=tk.LEFT)
         ttk.Label(score_row, text=" 分", style="Panel.TLabel", font=("Microsoft YaHei UI", 12)).pack(side=tk.LEFT)
 
-        sg = ttk.Frame(cp, style="Panel.TFrame")
+        sg = ttk.Frame(sf, style="Panel.TFrame")
         sg.pack(fill=tk.X, pady=(4, 0))
         self._card(sg, "关节角度", self.angle_score_text, "Panel.TLabel", 0, 0)
         self._card(sg, "时序", self.temporal_score_text, "Panel.TLabel", 0, 1)
         self._card(sg, "对称性", self.symmetry_score_text, "Panel.TLabel", 1, 0)
         self._card(sg, "保持时间", self.hold_time_text, "Panel.TLabel", 1, 1)
 
-        ttk.Separator(cp).pack(fill=tk.X, pady=10)
+        ttk.Separator(sf).pack(fill=tk.X, pady=10)
 
         # 错误提示
-        ttk.Label(cp, text="动作纠错", style="Panel.TLabel",
+        ttk.Label(sf, text="动作纠错", style="Panel.TLabel",
                   font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
-        self.errors_label = ttk.Label(cp, textvariable=self.errors_text,
+        self.errors_label = ttk.Label(sf, textvariable=self.errors_text,
                                        style="Panel.TLabel", wraplength=300,
                                        foreground="#dc2626", justify=tk.LEFT)
         self.errors_label.pack(fill=tk.X, pady=(4, 0))
 
         # 教练指导
-        self.guidance_label = ttk.Label(cp, textvariable=self.guidance_text,
+        self.guidance_label = ttk.Label(sf, textvariable=self.guidance_text,
                                          style="Panel.TLabel", wraplength=300,
                                          foreground="#0f766e", justify=tk.LEFT,
                                          font=("Microsoft YaHei UI", 10, "italic"))
         self.guidance_label.pack(fill=tk.X, pady=(4, 0))
 
-        ttk.Separator(cp).pack(fill=tk.X, pady=10)
+        ttk.Separator(sf).pack(fill=tk.X, pady=10)
 
         # 动作选择
-        ttk.Label(cp, text="动作类型", style="Panel.TLabel").pack(anchor="w")
-        cb = ttk.Combobox(cp, textvariable=self.exercise_name,
+        ttk.Label(sf, text="动作类型", style="Panel.TLabel").pack(anchor="w")
+        cb = ttk.Combobox(sf, textvariable=self.exercise_name,
                           values=ALL_EXERCISES, state="readonly")
         cb.pack(fill=tk.X, pady=(4, 8))
         cb.bind("<<ComboboxSelected>>", lambda e: self._on_exercise_change())
 
         # 设置折叠区
-        self._build_settings(cp)
+        self._build_settings(sf)
 
-        ttk.Separator(cp).pack(fill=tk.X, pady=10)
+        ttk.Separator(sf).pack(fill=tk.X, pady=10)
 
         # 控制按钮
-        btn_frame = ttk.Frame(cp, style="Panel.TFrame")
+        btn_frame = ttk.Frame(sf, style="Panel.TFrame")
         btn_frame.pack(fill=tk.X)
 
         self.start_btn = tk.Button(btn_frame, text="▶ 开始训练", font=("Microsoft YaHei UI", 12, "bold"),
@@ -673,30 +689,23 @@ class WorkoutApp:
         ttk.Scale(cr, from_=0.1, to=0.8, variable=self.confidence).pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Label(cr, textvariable=self.confidence, style="Panel.TLabel", width=5).pack(side=tk.RIGHT, padx=(4, 0))
 
-        ttk.Label(self.settings_frame, text="聊天模型大小", style="Panel.TLabel").pack(anchor="w")
-        ttk.Combobox(self.settings_frame, textvariable=self.chat_model_size,
-                     values=CHAT_MODEL_SIZES, state="readonly", width=10).pack(fill=tk.X, pady=(2, 6))
-
-        ttk.Label(self.settings_frame, text="LoRA适配器路径 (可选)", style="Panel.TLabel").pack(anchor="w")
-        lora_row = ttk.Frame(self.settings_frame, style="Panel.TFrame")
-        lora_row.pack(fill=tk.X, pady=(2, 6))
-        ttk.Entry(lora_row, textvariable=self.chat_lora_path).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(lora_row, text="浏览", command=self._browse_lora).pack(side=tk.RIGHT, padx=(4, 0))
-
         ttk.Separator(self.settings_frame).pack(fill=tk.X, pady=6)
-        ttk.Checkbutton(self.settings_frame, text="启用远程 API 模式 (百炼API推理)",
-                        variable=self.chat_use_remote,
-                        command=self._toggle_remote_mode).pack(anchor="w", pady=(4, 2))
 
-        self.remote_frame = ttk.Frame(self.settings_frame, style="Panel.TFrame")
-        ttk.Label(self.remote_frame, text="API Key", style="Panel.TLabel").pack(anchor="w")
-        ttk.Entry(self.remote_frame, textvariable=self.chat_api_key, show="*").pack(fill=tk.X, pady=(2, 4))
-        ttk.Label(self.remote_frame, text="模型 Code", style="Panel.TLabel").pack(anchor="w")
-        ttk.Entry(self.remote_frame, textvariable=self.chat_model_code).pack(fill=tk.X, pady=(2, 4))
-        if not self.chat_use_remote.get():
-            self.remote_frame.pack_forget()
-        else:
-            self.remote_frame.pack(fill=tk.X)
+        ttk.Label(self.settings_frame, text="远程 API (百炼 DashScope)", style="Panel.TLabel",
+                  font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(4, 2))
+        ttk.Label(self.settings_frame, text="API Key", style="Panel.TLabel").pack(anchor="w")
+        api_key_entry = ttk.Entry(self.settings_frame, textvariable=self.chat_api_key, show="*")
+        api_key_entry.pack(fill=tk.X, pady=(2, 4))
+        ttk.Label(self.settings_frame, text="模型 Code", style="Panel.TLabel").pack(anchor="w")
+        model_code_entry = ttk.Entry(self.settings_frame, textvariable=self.chat_model_code)
+        model_code_entry.pack(fill=tk.X, pady=(2, 4))
+
+        def _on_api_config_change(*args):
+            self._save_api_config()
+            self._reinit_chat()
+
+        self.chat_api_key.trace_add("write", _on_api_config_change)
+        self.chat_model_code.trace_add("write", _on_api_config_change)
 
         ttk.Checkbutton(self.settings_frame, text="显示骨架连线", variable=self.show_skeleton).pack(anchor="w")
         ttk.Checkbutton(self.settings_frame, text="显示关键点编号", variable=self.show_labels).pack(anchor="w")
@@ -708,7 +717,7 @@ class WorkoutApp:
 
         header = tk.Frame(chat_frame, bg="#ffffff")
         header.pack(fill=tk.X, padx=10, pady=(8, 2))
-        tk.Label(header, text="🤖 AI 健身助手 (Qwen2.5 BaseModel)",
+        tk.Label(header, text="🤖 AI 健身助手 (DashScope Qwen2.5-7B)",
                  font=("Microsoft YaHei UI", 13, "bold"), bg="#ffffff", fg="#111827").pack(side=tk.LEFT)
         self.chat_status_label = tk.Label(header, text="", font=("Microsoft YaHei UI", 9),
                                            bg="#ffffff", fg="#6b7280")
@@ -777,23 +786,6 @@ class WorkoutApp:
         if path:
             self.model_path.set(path)
 
-    def _browse_lora(self):
-        path = filedialog.askdirectory(title="选择 LoRA adapter 目录")
-        if path:
-            self.chat_lora_path.set(path)
-            # Reset chat to reload with new adapter
-            self.chat_initialized = False
-            self.chat_status_label.configure(text="适配器已更换，下次启动生效")
-
-    def _toggle_remote_mode(self):
-        if self.chat_use_remote.get():
-            self.remote_frame.pack(fill=tk.X)
-        else:
-            self.remote_frame.pack_forget()
-        # Reset chat to re-init with new mode
-        self.chat_initialized = False
-        self._save_api_config()
-
     def _api_config_path(self):
         return BASE_DIR / "data" / "api_config.json"
 
@@ -803,7 +795,6 @@ class WorkoutApp:
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
-                self.chat_use_remote.set(cfg.get("use_remote", False))
                 self.chat_api_key.set(cfg.get("api_key", ""))
                 self.chat_model_code.set(cfg.get("model_code", ""))
             except Exception:
@@ -813,7 +804,7 @@ class WorkoutApp:
         path = self._api_config_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         cfg = {
-            "use_remote": self.chat_use_remote.get(),
+            "use_remote": True,
             "api_key": self.chat_api_key.get(),
             "model_code": self.chat_model_code.get(),
         }
@@ -966,12 +957,13 @@ class WorkoutApp:
             self.root.after(50, self._poll_queue)
 
     def _update_frame(self, result: DetectionResult):
-        # 渲染画面
+        # 渲染画面 — 使用固定显示宽度防止 label 无限扩展
         rgb = cv2.cvtColor(result.frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(rgb)
-        label_w = max(self.video_label.winfo_width(), 640)
-        label_h = max(self.video_label.winfo_height(), 360)
-        image.thumbnail((label_w, label_h), Image.Resampling.LANCZOS)
+        h, w = rgb.shape[:2]
+        display_w = 640
+        display_h = int(h * display_w / w)
+        image = image.resize((display_w, display_h), Image.Resampling.LANCZOS)
         self._photo = ImageTk.PhotoImage(image=image)
         self.video_label.configure(image=self._photo, text="")
 
@@ -1031,7 +1023,7 @@ class WorkoutApp:
         self._latest_analysis = analysis
 
         # 实时 LLM 教练主动推送
-        if (self.chat_use_remote.get() and self.chat_initialized
+        if (self.chat_initialized
                 and not self.chat_processing
                 and self.detection_thread and self.detection_thread.engine):
             context_str = self.coach.evaluate_frame(
@@ -1091,40 +1083,27 @@ class WorkoutApp:
     # ---- 聊天助手 ----
 
     def _init_chat(self):
-        # 有远程 API 凭证时优先使用远程模式
-        has_remote_creds = bool(self.chat_api_key.get() and self.chat_model_code.get())
-        if has_remote_creds:
-            if not self.chat_use_remote.get():
-                self.chat_use_remote.set(True)
-                self._save_api_config()
+        """初始化聊天 — 仅使用远程 DashScope API（百炼）。"""
+        if self.chat_api_key.get() and self.chat_model_code.get():
+            self._save_api_config()
             self.chat_initialized = True
             self.chat_status_label.configure(text="7B 远程 API 就绪")
-            return
-        if not _BASE_MODEL_AVAILABLE:
+        else:
             self._append_chat("system_msg",
-                "⚠ 模型系统不可用。运行: pip install torch transformers\n"
-                "或启用「远程 API 模式」使用百炼云端推理。")
-            self.chat_status_label.configure(text="未安装依赖")
-            return
-        threading.Thread(target=self._load_chat_model, daemon=True).start()
+                "⚠ 未配置远程 API。请在「设置」中填写 API Key 和模型 Code，\n"
+                "或手动创建 data/api_config.json 文件（参考 data/api_config.example.json）。")
+            self.chat_status_label.configure(text="未配置 API")
 
-    def _load_chat_model(self):
-        try:
-            model_size = self.chat_model_size.get()
-            lora_path = self.chat_lora_path.get() or None
-            self.root.after(0, lambda: self.chat_status_label.configure(
-                text=f"加载 {model_size} 模型中…"))
-            BaseModel.get_instance(model_size=model_size, lora_path=lora_path)
+    def _reinit_chat(self):
+        """用当前配置重新初始化聊天（不清空历史）。"""
+        if self.chat_api_key.get() and self.chat_model_code.get():
             self.chat_initialized = True
-            device = "GPU" if __import__('torch').cuda.is_available() else "CPU"
-            label = f"{model_size} ({device})"
-            if lora_path:
-                label += " +LoRA"
-            self.root.after(0, lambda: self.chat_status_label.configure(text=label))
-        except Exception as e:
-            self.root.after(0, lambda: self._append_chat("system_msg",
-                f"模型加载失败: {e}\n请检查网络连接或设置 HuggingFace 镜像: HF_ENDPOINT=https://hf-mirror.com"))
-            self.root.after(0, lambda: self.chat_status_label.configure(text="加载失败"))
+            self.chat_status_label.configure(text="7B 远程 API 就绪")
+            self._append_chat("system_msg", "✅ 远程 API 已就绪，可以开始对话。")
+        else:
+            self.chat_initialized = False
+            self.chat_status_label.configure(text="未配置 API")
+            self._append_chat("system_msg", "⚠ 请在设置中填写 API Key 和模型 Code。")
 
     def _append_chat(self, role, text):
         self.chat_display.configure(state=tk.NORMAL)
@@ -1153,7 +1132,7 @@ class WorkoutApp:
         if self.chat_processing:
             return
         if not self.chat_initialized:
-            self._append_chat("system_msg", "⚠ AI助手未就绪，请确认本地 Qwen2.5 模型已正确加载。")
+            self._append_chat("system_msg", "⚠ AI助手未就绪，请在「设置」中配置远程 API（API Key + 模型 Code）。")
             self.chat_input.delete("1.0", tk.END)
             return
 
@@ -1182,7 +1161,6 @@ class WorkoutApp:
 
     def _generate_chat(self, user_message, context=None):
         try:
-            # Choose system prompt and message content based on context
             if context:
                 system_prompt = COACH_SYSTEM_PROMPT
                 user_content = context
@@ -1190,31 +1168,23 @@ class WorkoutApp:
                 system_prompt = CHAT_SYSTEM_PROMPT
                 user_content = user_message
 
-            if self.chat_use_remote.get() and self.chat_api_key.get():
-                from openai import OpenAI
-                client = OpenAI(
-                    api_key=self.chat_api_key.get(),
-                    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-                )
-                completion = client.chat.completions.create(
-                    model=self.chat_model_code.get(),
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_content},
-                    ],
-                    temperature=0.7,
-                    max_tokens=800,
-                )
-                reply = completion.choices[0].message.content
-            else:
-                model = BaseModel.get_instance(model_size=self.chat_model_size.get())
-                messages = [
+            from openai import OpenAI
+            client = OpenAI(
+                api_key=self.chat_api_key.get(),
+                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            )
+            completion = client.chat.completions.create(
+                model=self.chat_model_code.get(),
+                messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content},
-                ]
-                reply = model.chat(messages, max_tokens=800, temperature=0.7)
+                ],
+                temperature=0.7,
+                max_tokens=800,
+            )
+            reply = completion.choices[0].message.content
         except Exception as e:
-            reply = f"请求失败：{e}"
+            reply = f"远程 API 请求失败：{e}\n请检查 API Key 和网络连接。"
         self.root.after(0, self._on_chat_response, reply)
 
     def _on_chat_response(self, reply):
@@ -1224,16 +1194,7 @@ class WorkoutApp:
         self.send_btn.configure(text="发送")
         self._on_input_change()
         self.chat_processing = False
-        if self.chat_use_remote.get():
-            self.chat_status_label.configure(text="7B 远程 API 就绪")
-        else:
-            torch_available = False
-            try:
-                import torch; torch_available = torch.cuda.is_available()
-            except Exception:
-                pass
-            device = "GPU" if torch_available else "CPU"
-            self.chat_status_label.configure(text=f"{self.chat_model_size.get()} ({device})")
+        self.chat_status_label.configure(text="7B 远程 API 就绪")
 
     # ---- 实时 LLM 教练主动推送 ----
 
@@ -1274,8 +1235,7 @@ class WorkoutApp:
         if reply:
             self._append_chat("assistant", reply)
         self.chat_processing = False
-        if self.chat_use_remote.get():
-            self.chat_status_label.configure(text="7B 远程 API 就绪")
+        self.chat_status_label.configure(text="7B 远程 API 就绪")
 
 
 # ============================================================================

@@ -330,12 +330,16 @@ class TemporalFeatureExtractor:
         )
 
     def _track_rep(self, phase: str, timestamp: float):
-        """追踪 rep 开始/结束."""
+        """追踪 rep 开始/结束及运动幅度."""
+        # rep 完成: 低位→高位
         if self._last_phase == "低位" and phase == "高位":
             if self._rep_start_time is not None:
                 duration = timestamp - self._rep_start_time
                 self.rep_durations.append(duration)
             self._rep_start_time = None
+            # 记录本次 rep 的峰值 (angle_history 最大值)
+            if len(self.angle_history) > 0:
+                self.rep_peaks.append(max(self.angle_history))
         elif self._last_phase == "高位" and phase == "低位":
             self._rep_start_time = timestamp
         self._last_phase = phase
@@ -527,32 +531,29 @@ class MovementScorer:
     - 时序一致性得分: 0-30 分 (节奏 + 平滑度)
     - 对称性得分: 0-30 分 (左右平衡)
 
-    支持时序平滑处理，减少单帧误差:
-    - EMA 平滑角度序列，降低关键点抖动影响
-    - EMA 平滑各子项得分，避免帧间得分剧烈波动
-    - 中值滤波消除角度异常尖峰
+    时序平滑: EMA 平滑角度序列 + EMA 平滑各子项得分，减少单帧波动.
+    相位感知: 使用 PoseAnalyzer 传入的实际相位选择目标角度，避免自推断偏差.
     """
 
-    def __init__(self, exercise_name: str, smooth_alpha: float = 0.7,
-                 median_window: int = 5):
+    def __init__(self, exercise_name: str, smooth_alpha: float = 0.7):
         self.exercise_name = exercise_name
         self.standard = EXERCISE_STANDARDS.get(exercise_name)
         self.smooth_alpha = smooth_alpha  # EMA 平滑系数
-        self.median_window = median_window  # 中值滤波窗口
         self._angle_samples: list = []       # 原始角度值
         self._smoothed_angles: list = []     # EMA 平滑后角度值
         self._symmetry_diffs: dict[str, list] = {}  # 每帧各关节左右差值
+        self._current_phase: str = "高位"     # 从 PoseAnalyzer 传入的实际相位
 
         # EMA 平滑后的得分缓存 (None = 尚未初始化)
         self._smooth_angle_score: Optional[float] = None
         self._smooth_temporal_score: Optional[float] = None
         self._smooth_symmetry_score: Optional[float] = None
-        self._prev_total: float = 0.0
 
     def update_angle(self, angle_value: Optional[float], phase: str):
-        """记录一帧的角度（应用 EMA 平滑）."""
+        """记录一帧的角度（应用 EMA 平滑，存储相位用于目标选择）."""
         if angle_value is not None and phase != "等待":
             self._angle_samples.append(float(angle_value))
+            self._current_phase = phase
             # EMA 平滑: smoothed = α * raw + (1-α) * prev_smoothed
             prev = self._smoothed_angles[-1] if self._smoothed_angles else float(angle_value)
             smoothed = self.smooth_alpha * float(angle_value) + (1 - self.smooth_alpha) * prev
@@ -597,50 +598,37 @@ class MovementScorer:
     def _score_angle(self) -> float:
         """关节角度得分 (0-40).
 
-        使用高斯衰减: score = 40 * exp(-(偏差/tolerance)²)
-        使用 EMA 平滑后的角度序列 + 中值滤波抗尖峰.
+        高斯衰减: score = 40 * exp(-(mean_dev/tolerance)²)
+        使用 PoseAnalyzer 传入的实际相位选择目标角度，EMA 平滑抗噪声.
         """
         if not self.standard or not self._smoothed_angles:
             return 0.0
 
-        # 根据当前相位选择目标角度
-        target = self.standard.target_low if self._in_low_phase else self.standard.target_high
-        tolerance = 15.0  # 容差
+        # 根据实际相位选择目标角度
+        if self._current_phase in ("低位", "保持"):
+            target = self.standard.target_low
+        else:
+            target = self.standard.target_high
 
-        # 取最近平滑样本
-        smooth = self._smoothed_angles
-        recent = smooth[-30:] if len(smooth) > 30 else smooth
+        tolerance = 10.0  # 容差 (度)
 
-        # 中值滤波: 剔除异常尖峰
-        if len(recent) >= self.median_window:
-            recent_sorted = sorted(recent)
-            half_w = self.median_window // 2
-            recent = recent_sorted[half_w:-half_w] if half_w > 0 else recent_sorted
+        # 取最近平滑样本 (~1秒)
+        recent = self._smoothed_angles[-30:]
 
         deviations = [abs(a - target) for a in recent]
         mean_dev = float(np.mean(deviations))
 
         return 40.0 * math.exp(-((mean_dev / tolerance) ** 2))
 
-    @property
-    def _in_low_phase(self) -> bool:
-        """简单判断当前是否低位（根据最近样本均值）."""
-        if not self.standard or not self._angle_samples:
-            return False
-        recent = self._angle_samples[-15:] if len(self._angle_samples) > 15 else self._angle_samples
-        avg = float(np.mean(recent))
-        low_mid = (self.standard.low_range[0] + self.standard.low_range[1]) / 2
-        high_mid = (self.standard.high_range[0] + self.standard.high_range[1]) / 2
-        return abs(avg - low_mid) < abs(avg - high_mid)
-
     def _score_temporal(self, temporal: TemporalFeatures) -> float:
         """时序一致性得分 (0-30).
 
-        - 节奏稳定性: 15分, CV < 15% 得满分
-        - 动作平滑度: 15分, jerk 归一化
+        - 节奏稳定性: 15分, CV < 15% 得满分. CV=0 且无 rep 数据时不给满分.
+        - 动作平滑度: 15分, jerk 线性映射.
         """
-        rhythm_score = 15.0 * max(0.0, 1.0 - temporal.rhythm_consistency / 0.20)
-        # 平滑度: jerk 在 0-50 范围内做线性映射, 0 jerk = 15分
+        # CV=0 可能是无数据, 取不低于 0.03 避免未运动就得满分
+        effective_cv = max(temporal.rhythm_consistency, 0.03)
+        rhythm_score = 15.0 * max(0.0, 1.0 - effective_cv / 0.20)
         smooth_score = 15.0 * max(0.0, 1.0 - temporal.smoothness / 50.0)
         return rhythm_score + smooth_score
 
@@ -648,9 +636,10 @@ class MovementScorer:
         """对称性得分 (0-30).
 
         每个关注关节: 左右差异 < max_diff 得满分, 线性衰减.
+        无数据时返回中性分 15，不盲目给满分.
         """
         if not self.standard or not self._symmetry_diffs:
-            return 30.0  # 无数据默认满分
+            return 15.0  # 无数据返回中性分
 
         scores = []
         for joint in self.standard.symmetry_joints:
@@ -673,7 +662,7 @@ class MovementScorer:
         self._smooth_angle_score = None
         self._smooth_temporal_score = None
         self._smooth_symmetry_score = None
-        self._prev_total = 0.0
+        self._current_phase = "高位"
 
 
 # ============================================================================

@@ -344,7 +344,7 @@ class TestMovementScorer:
 
     def test_median_filter_removes_outliers(self):
         """中值滤波应消除异常尖峰."""
-        scorer = MovementScorer("深蹲", smooth_alpha=0.7, median_window=5)
+        scorer = MovementScorer("深蹲", smooth_alpha=0.7)
         angles = JointAngles(knee_left=170, knee_right=170)
 
         # 填充正常值并预热得分
@@ -824,7 +824,7 @@ class TestTemporalSmoothing:
 
     def test_score_smoothing_stability(self):
         """得分平滑应保持稳定."""
-        scorer = MovementScorer("深蹲", smooth_alpha=0.7, median_window=5)
+        scorer = MovementScorer("深蹲", smooth_alpha=0.7)
         angles = JointAngles(knee_left=170, knee_right=170)
 
         scores = []

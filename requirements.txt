@@ -33,6 +33,9 @@ pydantic>=2.0.0
 # --- Remote API (DashScope / Bailian) ---
 openai>=1.30.0
 
+# --- LangGraph Agent ---
+langgraph>=0.2.0
+
 # --- Data Collection (optional scrapers) ---
 requests>=2.31.0
 

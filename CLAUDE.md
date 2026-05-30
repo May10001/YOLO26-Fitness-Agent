@@ -51,6 +51,9 @@ python scripts/test_remote_api.py
 python scripts/test_remote_api.py -q "如何做标准俯卧撑？"
 python scripts/test_remote_api.py -m          # multi-turn chat mode
 
+# Test LangGraph coaching agent (graph compilation + state, API call if configured)
+python -m code.langgraph_agent.agent
+
 # LoRA fine-tuning
 python -m code.models.fine_tuning.trainer                    # default 1.5B
 python -m code.models.fine_tuning.trainer --model 7B         # full quality
@@ -70,7 +73,7 @@ Webcam → YOLO26 pose (17 keypoints) → PoseAnalyzer → ContextEngine → gui
                                                       → JointAngleHeatmap → ASCII heatmap
                                 User query → FitnessAgent.chat() → Qwen2.5 (+LoRA) → reply
                                 UserProfile → PlanGenerator → weekly workout plan
-                                AnalysisResult + GuidanceState → RealTimeCoach → DashScope API → chat panel
+                                AnalysisResult + GuidanceState → LangGraph CoachAgent → DashScope API → chat panel
 ```
 
 ### AI chat dual mode
@@ -89,6 +92,12 @@ The chat assistant supports two modes, toggled in the GUI settings panel:
 - **`code/realtime_coach.py`** — Real-time LLM coaching engine. Consumes per-frame `AnalysisResult` + `GuidanceState`, builds structured Chinese context strings, evaluates triggers (severe error, score drop, milestone, personal best, good streak), and manages rate limiting (cooldowns per type + global 6s minimum). Contains `CoachContextBuilder`, `CoachTriggerEvaluator`, and `RealTimeCoach` classes.
 
 - **`code/coach_system_prompt.py`** — System prompt and context templates for the fine-tuned coach model. Contains `COACH_SYSTEM_PROMPT` (full, for reactive chat), `COACH_SYSTEM_PROMPT_PROACTIVE` (shorter, for auto-push), and `COACH_CONTEXT_TEMPLATE` / `COACH_REACTIVE_TEMPLATE` for structured context formatting.
+
+- **`code/langgraph_agent/`** — LangGraph-based coaching agent. Formalizes the pipeline scoring input → context building → LLM API call → coaching response. Contains:
+  - `state.py` — `CoachAgentState` TypedDict bridging `AnalysisResult`, `GuidanceState`, and LLM context. Provides `state_from_analysis()` and `state_from_dict()` factory functions.
+  - `nodes.py` — Three graph nodes: `select_system_prompt_node` (picks COACH prompt variant), `build_context_node` (wraps `CoachContextBuilder`), `call_dashscope_node` (wraps DashScope API via OpenAI SDK).
+  - `graph.py` — `create_coach_graph()` building a linear `StateGraph` with the three nodes.
+  - `agent.py` — `CoachAgent` facade with `coach_proactive()` (auto-push), `coach_reactive()` (user chat), and `chat()` (string-in/out, compatible with existing patterns).
 
 - **`code/models/base_model.py`** — Singleton `BaseModel` wrapping Qwen2.5-Instruct (0.5B/1.5B/3B/7B) with optional LoRA adapter injection via PEFT. Handles device placement (CUDA/CPU), tokenizer setup, and chat template formatting.
 
@@ -185,16 +194,17 @@ Browser camera (MediaStream API)
   → frontend updates VideoStage, GaugeBars, SkeletonOverlay, ScorePanel
 
 User chat message
-  → POST /api/chat {message, history}
-  → backend tries remote API (DashScope) first, falls back to local model
-  → streaming/complete response returned to AiCoach component
+  → POST /api/chat {message, pose_context}
+  → if pose_context: LangGraph CoachAgent (coach prompts → DashScope QWEN)
+  → otherwise: generic DashScope call or local model fallback
+  → coaching/chat response returned to AiCoach component
 ```
 
 ### Backend modules (`backend/`)
 
 - **`backend/main.py`** — FastAPI app with CORS middleware. Mounts detect and chat routers.
 - **`backend/routers/detect.py`** — WebSocket `/ws/detect` endpoint. Handles `set_exercise`, `reset`, `frame` message types. Lazy-loads DetectorService.
-- **`backend/routers/chat.py`** — REST `POST /api/chat`. Tries remote DashScope API first (reads `data/api_config.json`), falls back to local FitnessAgent.
+- **`backend/routers/chat.py`** — REST `POST /api/chat`. When `pose_context` is provided, uses LangGraph `CoachAgent` with coach-specific system prompts and structured context. Otherwise falls back to generic DashScope API call or local `FitnessAgent`.
 - **`backend/services/detector.py`** — Wraps YOLO26 model + PoseAnalyzer + ContextEngine. `process_frame()` returns detection results dict.
 - **`backend/services/agent_service.py`** — Lazy singleton for FitnessAgent. Defers `transformers` import until first chat request.
 - **`backend/schemas.py`** — Pydantic models for API request/response types.

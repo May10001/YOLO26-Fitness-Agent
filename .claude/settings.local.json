@@ -23,7 +23,9 @@
       "Bash(python -c \"import json; data = json.load\\(open\\('data/processed/fitness_dataset.json','r',encoding='utf-8'\\)\\); types = set\\(\\); [types.add\\(s.get\\('type','?'\\)\\) for s in data.get\\('correction_samples',[]\\)]; print\\('Types:', types\\); print\\('Count:', len\\(data.get\\('correction_samples',[]\\)\\)\\)\")",
       "Bash(python -m pytest tests/test_pose_analyzer.py -v)",
       "Bash(timeout 15 python scripts/test_remote_api.py -q \"你好，1+1等于几？\")",
-      "Bash(timeout 6 python -c ' *)"
+      "Bash(timeout 6 python -c ' *)",
+      "Bash(python -c \"from code.langgraph_agent import CoachAgent, CoachAgentState, create_coach_graph; print\\('All imports OK'\\); print\\(f'State fields: {list\\(CoachAgentState.__annotations__.keys\\(\\)\\)}'\\)\")",
+      "Bash(python -m code.langgraph_agent.agent)"
     ]
   }
 }

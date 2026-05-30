@@ -38,21 +38,28 @@ async def chat(req: ChatRequest):
 
     if config.get("use_remote") and config.get("api_key"):
         try:
-            from openai import OpenAI
-            client = OpenAI(
-                api_key=config["api_key"],
-                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-            )
-            completion = client.chat.completions.create(
-                model=config.get("model_code", "qwen-plus"),
-                messages=[
-                    {"role": "system", "content": CHAT_SYSTEM_PROMPT},
-                    {"role": "user", "content": req.message},
-                ],
-                temperature=0.7,
-                max_tokens=800,
-            )
-            reply = completion.choices[0].message.content
+            # LangGraph coaching path: use structured pose_context + coach prompts
+            if req.pose_context:
+                from code.langgraph_agent.agent import CoachAgent
+                agent = CoachAgent(api_config=config)
+                reply = agent.chat(req.message, pose_context_str=req.pose_context)
+            else:
+                # Original generic DashScope path (unchanged)
+                from openai import OpenAI
+                client = OpenAI(
+                    api_key=config["api_key"],
+                    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                )
+                completion = client.chat.completions.create(
+                    model=config.get("model_code", "qwen-plus"),
+                    messages=[
+                        {"role": "system", "content": CHAT_SYSTEM_PROMPT},
+                        {"role": "user", "content": req.message},
+                    ],
+                    temperature=0.7,
+                    max_tokens=800,
+                )
+                reply = completion.choices[0].message.content
         except Exception as e:
             reply = f"远程API调用失败: {e}"
     else:

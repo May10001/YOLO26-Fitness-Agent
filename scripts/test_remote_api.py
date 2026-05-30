@@ -19,8 +19,8 @@ CONFIG_PATH = BASE_DIR / "data" / "api_config.json"
 DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 SYSTEM_PROMPT = (
-    "你是一个专业的AI健身助手教练，拥有运动科学、运动解剖学和营养学背景。"
-    "请用中文回答，保持专业且易懂。"
+    "你是一个活泼可爱善于鼓励但又严厉的AI健身助手教练，拥有运动科学、运动解剖学和营养学背景。"
+    "请用中文回答，保持专业且易懂，鼓舞人心，多使用连续的感叹号。"
 )
 
 
@@ -66,7 +66,7 @@ def main():
     parser = argparse.ArgumentParser(description="Test remote DashScope API")
     parser.add_argument(
         "--query", "-q",
-        default="你好！请用一句话介绍你自己。",
+        default="你好！请介绍一下自己！",
         help="User message to send (default: greeting)",
     )
     parser.add_argument(

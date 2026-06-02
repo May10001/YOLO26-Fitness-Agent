@@ -58,32 +58,53 @@ class PromptGenerator:
 
     def generate_correction(
         self,
-        exercise: str,
-        detected_error: str,
-        severity: int,
+        exercise: str = "",
+        detected_error: str = "",
+        severity: int = 0,
         phase: str = "",
         score: float = 0,
         error_count: int = 0,
         consecutive_frames: int = 0,
+        context: Optional[dict] = None,
         use_llm: bool = False,
         use_fewshot: bool = True,
     ) -> GenerationResult:
         """Generate action correction guidance.
 
+        Args:
+            context: Full JSON coaching context dict (preferred).
+                     If provided, overrides the individual params.
+            exercise, detected_error, severity, ...: Legacy individual params.
+                Only used when context is None.
+
         If use_llm=True and model is available, uses the LLM.
         Otherwise falls back to rule-based template generation.
         """
-        messages = self.builder.build_correction_prompt(
-            exercise, detected_error, severity, phase, score,
-        )
-
-        input_info = {
-            "exercise": exercise,
-            "detected_error": detected_error,
-            "severity": severity,
-            "phase": phase,
-            "score": score,
-        }
+        if context is not None:
+            # New JSON context path
+            messages = self.builder.build_correction_prompt(context)
+            input_info = dict(context)  # shallow copy
+        else:
+            # Legacy path: build minimal context from individual params
+            context = {
+                "exercise": {"cn": exercise, "en": exercise},
+                "rep_count": 0,
+                "phase": phase,
+                "score": {"total": score, "angle": 0, "temporal": 0, "symmetry": 0},
+                "joint_angles": {},
+                "errors": [
+                    {"name": detected_error, "severity": severity, "suggestion": ""}
+                ] if detected_error else [],
+                "stats": {},
+            }
+            messages = self.builder.build_correction_prompt(context)
+            input_info = {
+                "exercise": exercise,
+                "detected_error": detected_error,
+                "severity": severity,
+                "phase": phase,
+                "score": score,
+            }
 
         if use_llm and self.model is not None:
             try:
@@ -97,7 +118,12 @@ class PromptGenerator:
                 logger.warning("LLM 调用失败，回退到规则生成: %s", e)
 
         # Rule-based fallback
-        output = self._rule_based_correction(exercise, detected_error, severity)
+        ex_name = exercise or context.get("exercise", {}).get("cn", "深蹲")
+        err_name = detected_error
+        if not err_name and context.get("errors"):
+            err_name = context["errors"][0]["name"]
+        err_severity = severity or (context.get("errors", [{}])[0].get("severity", 2) if context.get("errors") else 2)
+        output = self._rule_based_correction(ex_name, err_name, err_severity)
         return GenerationResult(
             input_info=input_info,
             output_text=output,
@@ -320,9 +346,29 @@ def demo():
     print("=" * 60)
     print("Demo 3: Prompt 质量评估")
     print("=" * 60)
-    messages = gen.builder.build_correction_prompt(
-        "深蹲", "膝盖内扣", 2, "低位", 55,
-    )
+    context = {
+        "exercise": {"cn": "深蹲", "en": "squat"},
+        "rep_count": 6,
+        "phase": "离心收缩",
+        "score": {"total": 55, "angle": 20, "temporal": 20, "symmetry": 15},
+        "joint_angles": {
+            "knee": {"left": 75, "right": 68},
+            "hip": {"left": 65, "right": 70},
+            "elbow": {"left": None, "right": None},
+            "shoulder": {"left": None, "right": None},
+            "trunk": 30,
+            "ankle": {"left": 25, "right": 28},
+        },
+        "errors": [
+            {"name": "膝盖内扣", "severity": 2, "suggestion": "保持膝盖与脚尖方向一致"}
+        ],
+        "stats": {
+            "best_score": 72, "avg_recent_score": 58,
+            "consecutive_good": 0, "consecutive_bad": 3,
+            "error_ranking": {"膝盖内扣": 5, "深度不足": 2},
+        },
+    }
+    messages = gen.builder.build_correction_prompt(context)
     quality = gen.evaluate_prompt(messages)
     for k, v in quality.items():
         print(f"  {k}: {v}")

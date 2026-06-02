@@ -221,6 +221,101 @@ class ContextEngine:
             f"最佳评分: {self.state.best_score:.0f}分"
         )
 
+    # Mapping from internal phase names to standard exercise science terminology
+    PHASE_MAP = {
+        "高位": "向心收缩",
+        "低位": "离心收缩",
+        "保持": "等长保持",
+        "等待": "等待",
+        "姿态调整": "等待",
+    }
+
+    # Chinese → English exercise name mapping
+    EXERCISE_EN_MAP = {
+        "深蹲": "squat",
+        "俯卧撑": "push-up",
+        "平板支撑": "plank",
+        "卷腹": "crunch",
+        "开合跳": "jumping jack",
+        "引体向上": "pull-up",
+        "臀桥": "glute bridge",
+        "高抬腿": "high knees",
+        "肩推": "shoulder press",
+        "侧平举": "lateral raise",
+    }
+
+    def build_coach_context_json(self, result: AnalysisResult) -> dict:
+        """Build a JSON-serializable coaching context dict for LLM prompt injection.
+
+        Combines the current AnalysisResult with historical stats from GuidanceState
+        to produce a complete snapshot the model can reason about.
+
+        Returns a dict matching the coach context JSON schema.
+        """
+        # --- exercise ---
+        exercise_en = self.EXERCISE_EN_MAP.get(self.exercise_name, self.exercise_name)
+        exercise = {"cn": self.exercise_name, "en": exercise_en}
+
+        # --- rep_count ---
+        rep_count = result.count
+
+        # --- phase (mapped to standard terminology) ---
+        phase = self.PHASE_MAP.get(result.phase, result.phase)
+
+        # --- score ---
+        score = {
+            "total": result.score.total,
+            "angle": result.score.angle_score,
+            "temporal": result.score.temporal_score,
+            "symmetry": result.score.symmetry_score,
+        }
+
+        # --- joint_angles ---
+        a = result.angles
+        joint_angles = {
+            "knee":    {"left": a.knee_left,    "right": a.knee_right},
+            "hip":     {"left": a.hip_left,     "right": a.hip_right},
+            "elbow":   {"left": a.elbow_left,   "right": a.elbow_right},
+            "shoulder": {"left": a.shoulder_left, "right": a.shoulder_right},
+            "trunk":   a.trunk_angle,
+            "ankle":   {"left": a.ankle_left,   "right": a.ankle_right},
+        }
+
+        # --- errors ---
+        errors = [
+            {
+                "name": err.name,
+                "severity": err.severity,
+                "suggestion": err.suggestion,
+            }
+            for err in result.errors
+        ]
+
+        # --- stats ---
+        recent = self.state.recent_scores
+        avg_recent = round(sum(recent) / len(recent), 1) if recent else 0.0
+        # Build error ranking from accumulated counts
+        error_ranking = dict(
+            sorted(self.state.error_counts.items(), key=lambda x: x[1], reverse=True)
+        )
+        stats = {
+            "best_score": round(self.state.best_score, 1),
+            "avg_recent_score": avg_recent,
+            "consecutive_good": self.state.consecutive_good_form,
+            "consecutive_bad": self.state.consecutive_bad_form,
+            "error_ranking": error_ranking,
+        }
+
+        return {
+            "exercise": exercise,
+            "rep_count": rep_count,
+            "phase": phase,
+            "score": score,
+            "joint_angles": joint_angles,
+            "errors": errors,
+            "stats": stats,
+        }
+
     def reset(self):
         self.state = GuidanceState()
         self._last_guidance.clear()

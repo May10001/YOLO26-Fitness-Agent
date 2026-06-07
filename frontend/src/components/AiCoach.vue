@@ -5,8 +5,11 @@
       <div v-for="(msg, i) in messages" :key="i"
            class="max-w-[92%] rounded-lg px-3 py-2 text-[10px]"
            :class="msg.role === 'ai'
-             ? 'bg-flame/[0.08] border border-flame/[0.12] text-gray-200 self-start'
+             ? msg.proactive
+               ? 'bg-flame/[0.10] border border-flame/30 border-l-[3px] border-l-flame text-gray-200 self-start'
+               : 'bg-flame/[0.08] border border-flame/[0.12] text-gray-200 self-start'
              : 'bg-white/[0.05] border border-white/[0.08] text-gray-400 self-end'">
+        <span v-if="msg.proactive" class="text-[8px] text-flame/60 uppercase tracking-wider mr-1">⚡ 教练提示</span>
         {{ msg.text }}
       </div>
     </div>
@@ -20,15 +23,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, watch, nextTick } from 'vue'
+import type { PoseContext, CoachMessage } from '../types'
 
-interface Message { role: 'ai' | 'user'; text: string }
+const props = defineProps<{
+  poseContext?: PoseContext
+  coachMessage?: CoachMessage | null
+}>()
+
+interface Message { role: 'ai' | 'user'; text: string; proactive?: boolean }
 
 const messages = ref<Message[]>([
   { role: 'ai', text: '你好！我是你的AI健身教练，有什么可以帮你的？' }
 ])
 const input = ref('')
 const messagesRef = ref<HTMLElement | null>(null)
+
+// Watch for proactive coach pushes from backend WebSocket
+watch(() => props.coachMessage, (msg) => {
+  if (msg && msg.text) {
+    messages.value.push({ role: 'ai', text: msg.text, proactive: true })
+    nextTick(() => scrollToBottom())
+  }
+})
 
 async function send() {
   const text = input.value.trim()
@@ -38,14 +55,21 @@ async function send() {
   await nextTick()
   scrollToBottom()
 
+  // Build request body — include pose_context when available
+  const body: Record<string, unknown> = { message: text }
+  if (props.poseContext) {
+    body.pose_context = JSON.stringify(props.poseContext)
+  }
+
   try {
     const res = await fetch('http://localhost:8000/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify(body),
     })
     const data = await res.json()
-    messages.value.push({ role: 'ai', text: data.reply })
+    const reply = data.reply || data.response || data.error || '暂无回复'
+    messages.value.push({ role: 'ai', text: reply })
   } catch {
     messages.value.push({ role: 'ai', text: '连接失败，请检查后端服务是否启动。' })
   }

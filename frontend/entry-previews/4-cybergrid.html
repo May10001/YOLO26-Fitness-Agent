@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>入场页 · 赛博网格</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; font-family: -apple-system, "PingFang SC", sans-serif; }
+  body { background: linear-gradient(180deg, #060608 0%, #0a0a0f 55%, #1a0a12 100%); cursor: pointer; perspective: 320px; }
+
+  /* 发光地平线 */
+  .horizon { position: fixed; left: 0; right: 0; top: 58%; height: 2px; z-index: 2;
+    background: linear-gradient(90deg, transparent, #ff6a00 30%, #ee0979 70%, transparent);
+    box-shadow: 0 0 40px 8px rgba(255,106,0,.5), 0 0 80px 20px rgba(238,9,121,.3); }
+  .glowsky { position: fixed; left: 0; right: 0; top: 30%; height: 28%; z-index: 1;
+    background: radial-gradient(ellipse at 50% 100%, rgba(255,106,0,.35), rgba(238,9,121,.12) 50%, transparent 75%); }
+
+  /* 透视网格地面 */
+  .grid { position: fixed; left: -50%; right: -50%; top: 58%; bottom: -10%; z-index: 1;
+    background-image: linear-gradient(rgba(255,106,0,.4) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(238,9,121,.3) 1px, transparent 1px);
+    background-size: 60px 60px; transform: rotateX(72deg); transform-origin: top center;
+    animation: gridmove 4s linear infinite;
+    -webkit-mask-image: linear-gradient(180deg, transparent, #000 30%); mask-image: linear-gradient(180deg, transparent, #000 30%); }
+  @keyframes gridmove { from { background-position: 0 0; } to { background-position: 0 60px; } }
+
+  .content { position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; z-index: 5; pointer-events: none; padding-bottom: 12vh; }
+  .title { font-size: clamp(2.2rem, 7vw, 5.5rem); font-weight: 800; letter-spacing: .04em;
+    background: linear-gradient(90deg, #fff 10%, #ffcaa6 45%, #ff6a00 70%, #ee0979 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 60px rgba(255,106,0,.3); animation: titleIn 1.4s cubic-bezier(.16,1,.3,1) both; }
+  .sub { margin-top: 1.2rem; font-size: clamp(.85rem, 1.6vw, 1.15rem); letter-spacing: .5em;
+    color: rgba(255,255,255,.55); font-weight: 300; padding-left: .5em;
+    animation: titleIn 1.4s cubic-bezier(.16,1,.3,1) .2s both; }
+  @keyframes titleIn { from{opacity:0; transform:translateY(24px); filter:blur(8px)} to{opacity:1; transform:none; filter:none} }
+  .enter { margin-top: 26vh; font-size: clamp(1rem, 2.2vw, 1.5rem); font-weight: 500;
+    letter-spacing: .35em; padding-left: .35em; color: #fff;
+    animation: titleIn 1.4s cubic-bezier(.16,1,.3,1) .5s both, breathe 2.6s ease-in-out 1.9s infinite; }
+  @keyframes breathe {
+    0%,100% { opacity: .25; text-shadow: 0 0 8px rgba(255,255,255,.1); }
+    50%     { opacity: 1;   text-shadow: 0 0 24px rgba(255,138,61,.7), 0 0 48px rgba(238,9,121,.4); }
+  }
+  .ripple { position: fixed; border-radius: 50%; transform: translate(-50%,-50%) scale(0); z-index: 20;
+    background: radial-gradient(circle, rgba(255,138,61,.9) 0%, rgba(238,9,121,.5) 40%, transparent 70%); pointer-events: none; }
+  .ripple.go { animation: ripple 1.1s cubic-bezier(.16,1,.3,1) forwards; }
+  @keyframes ripple { to { transform: translate(-50%,-50%) scale(28); opacity: 0; } }
+  .layer { transition: opacity .9s ease .25s; }
+  body.leaving .layer { opacity: 0; }
+</style>
+</head>
+<body>
+  <div class="glowsky layer"></div>
+  <div class="grid layer"></div>
+  <div class="horizon layer"></div>
+  <div class="content layer">
+    <h1 class="title">YOLO26 FITNESS AGENT</h1>
+    <p class="sub">你的实时 AI 健身教练</p>
+    <div class="enter">点击进入</div>
+  </div>
+<script>
+  const W = innerWidth, H = innerHeight;
+  document.body.addEventListener('click', e => {
+    if (document.body.classList.contains('leaving')) return;
+    const r = document.createElement('div'); r.className = 'ripple go';
+    const s = Math.max(W, H) * .12; r.style.width = r.style.height = s + 'px';
+    r.style.left = e.clientX + 'px'; r.style.top = e.clientY + 'px';
+    document.body.appendChild(r); document.body.classList.add('leaving');
+  });
+</script>
+</body>
+</html>

@@ -119,7 +119,7 @@ def call_dashscope_node(state: CoachAgentState) -> dict:
     """
     api_config = state.get("api_config", {})
     if not api_config.get("use_remote") or not api_config.get("api_key"):
-        return {"error": "No remote API configured", "response": ""}
+        return {"error": "请在项目根目录的 data/api_config.json 中配置 DashScope API 密钥（use_remote, api_key, model_code），以启用AI教练功能。", "response": ""}
 
     system_prompt = state.get("system_prompt", "")
     context_prompt = state.get("context_prompt", "")

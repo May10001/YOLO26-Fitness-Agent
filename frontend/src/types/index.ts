@@ -27,6 +27,90 @@ export interface DetectionResult {
   hold_time?: number
   errors?: ErrorData[]
   guidance?: GuidanceData
+  heatmap?: HeatmapData
+}
+
+export interface JointDeviation {
+  key: string
+  name: string
+  user_avg: number
+  standard_mid: number
+  deviation: number
+  deviation_ratio: number
+  severity: 'good' | 'warning' | 'bad'
+}
+
+export interface HeatmapData {
+  joints: JointDeviation[]
 }
 
 export type TrainingState = 'idle' | 'running' | 'paused'
+
+/** Context snapshot sent to backend /api/chat as pose_context.
+ *  All fields optional — the backend provides defaults for missing keys. */
+export interface PoseContext {
+  exercise_name: string
+  score?: ScoreData
+  phase?: string
+  rep_count?: number
+  hold_time?: number
+  errors?: ErrorData[]
+  best_score?: number
+  recent_scores?: number[]
+  chat_mode?: string
+}
+
+/** Proactive coaching message pushed from backend via WebSocket. */
+export interface CoachMessage {
+  type: 'coach'
+  text: string
+  trigger: string
+}
+
+/** Training session record from backend history API. */
+export interface SessionRecord {
+  session_id: string
+  exercise: string
+  start_time: string
+  duration_seconds: number
+  total_reps: number
+  best_score: number
+  avg_score: number
+  errors: Record<string, number>
+}
+
+/** User profile for plan generation. */
+export interface UserProfile {
+  name: string
+  age: number
+  weight_kg: number
+  height_cm: number
+  fitness_level: string
+  goal: string
+  equipment: string
+}
+
+/** One exercise in a daily plan. */
+export interface ExercisePlan {
+  name: string
+  sets: number
+  reps: number
+  rest_seconds: number
+  notes: string
+}
+
+/** One day in a weekly plan. */
+export interface DailyPlan {
+  day: string
+  focus: string
+  exercises: ExercisePlan[]
+}
+
+/** Full weekly workout plan. */
+export interface WeeklyPlan {
+  user_name: string
+  goal: string
+  level: string
+  week_start: string
+  days: DailyPlan[]
+}

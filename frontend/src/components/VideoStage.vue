@@ -24,9 +24,10 @@
       <span v-if="result?.phase" class="px-2.5 py-1 rounded-full text-[10px] text-emerald-400 bg-black/60 backdrop-blur border border-emerald-500/30">{{ result.phase }}</span>
     </div>
 
-    <!-- HUD bottom-left -->
+    <!-- HUD bottom-left: rep count / hold time -->
     <div class="absolute bottom-[46px] left-7 flex gap-1.5">
-      <span class="px-2.5 py-1 rounded-lg text-[10px] text-gray-400 bg-black/60 backdrop-blur border border-white/5">次数 <b class="text-flame">{{ result?.count || 0 }}</b></span>
+      <span v-if="isHoldExercise" class="px-2.5 py-1 rounded-lg text-[10px] text-gray-400 bg-black/60 backdrop-blur border border-white/5">保持 <b class="text-flame">{{ formattedHoldTime }}</b></span>
+      <span v-else class="px-2.5 py-1 rounded-lg text-[10px] text-gray-400 bg-black/60 backdrop-blur border border-white/5">次数 <b class="text-flame">{{ result?.count || 0 }}</b></span>
       <span class="px-2.5 py-1 rounded-lg text-[10px] text-gray-400 bg-black/60 backdrop-blur border border-white/5">时长 <b class="text-flame">{{ formattedTime }}</b></span>
       <span class="px-2.5 py-1 rounded-lg text-[10px] text-gray-400 bg-black/60 backdrop-blur border border-white/5">FPS <b class="text-flame">{{ fps }}</b></span>
     </div>
@@ -35,6 +36,25 @@
     <div class="absolute bottom-7 right-7 bg-black/75 backdrop-blur-lg border border-flame/25 rounded-xl px-4 py-2 text-center">
       <div class="text-3xl font-extrabold gradient-text leading-none">{{ score.total.toFixed(0) }}</div>
       <div class="text-[9px] text-gray-500 mt-0.5">TOTAL</div>
+    </div>
+
+    <!-- Guidance hint banner -->
+    <div v-if="guidance && isRunning"
+         class="absolute top-14 left-1/2 -translate-x-1/2 z-30 transition-all duration-300"
+         :class="guidancePillClass">
+      <div class="flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-semibold shadow-lg">
+        <span class="text-[10px] opacity-70">{{ guidanceTypeLabel }}</span>
+        <span>{{ guidance.text }}</span>
+      </div>
+    </div>
+
+    <!-- No person detected overlay -->
+    <div v-if="result && !result.detected && isRunning"
+         class="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-20">
+      <div class="text-center">
+        <div class="text-[13px] text-gray-300 animate-breathe mb-1">未检测到人体</div>
+        <div class="text-[9px] text-gray-500">请确保全身在镜头范围内</div>
+      </div>
     </div>
 
     <!-- Ready overlay -->
@@ -46,12 +66,13 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { DetectionResult, ScoreData } from '../types'
+import type { DetectionResult, ScoreData, GuidanceData } from '../types'
 import GaugeBar from './GaugeBar.vue'
 import SkeletonOverlay from './SkeletonOverlay.vue'
 
 const props = defineProps<{
   result: DetectionResult | null
+  guidance: GuidanceData | null
   exercise: string
   isRunning: boolean
   formattedTime: string
@@ -75,5 +96,40 @@ const glowClass = computed(() => {
   if (t >= 80) return 'border border-flame/30 shadow-[0_0_60px_rgba(255,106,0,0.12)]'
   if (t >= 60) return 'border border-flame/15 shadow-[0_0_30px_rgba(255,106,0,0.06)]'
   return 'border border-white/10 shadow-none'
+})
+
+// ---- Hold-time display for static exercises ----
+const HOLD_EXERCISES = new Set(['平板支撑', '臀桥'])
+const isHoldExercise = computed(() => HOLD_EXERCISES.has(props.exercise))
+
+const formattedHoldTime = computed(() => {
+  const h = Math.floor(props.result?.hold_time ?? 0)
+  const mins = Math.floor(h / 60)
+  const secs = h % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+})
+
+// ---- Guidance banner styling ----
+const guidanceTypeLabel = computed(() => {
+  const labels: Record<string, string> = {
+    form_correction: '纠正',
+    performance: '表现',
+    motivation: '鼓励',
+    safety: '安全',
+  }
+  return labels[props.guidance?.type ?? ''] ?? ''
+})
+
+const guidancePillClass = computed(() => {
+  const prio = props.guidance?.priority ?? 0
+  const type = props.guidance?.type ?? ''
+
+  if (type === 'safety' || prio >= 4) {
+    return 'bg-danger/80 text-white border border-danger shadow-[0_0_20px_rgba(255,77,77,0.5)]'
+  }
+  if (prio >= 3) {
+    return 'bg-flame/80 text-white border border-flame shadow-[0_0_20px_rgba(255,106,0,0.5)]'
+  }
+  return 'bg-black/70 backdrop-blur text-flame border border-flame/30'
 })
 </script>

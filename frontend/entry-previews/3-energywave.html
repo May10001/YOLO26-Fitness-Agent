@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>入场页 · 能量波</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; font-family: -apple-system, "PingFang SC", sans-serif; }
+  body { background: radial-gradient(ellipse at 50% 50%, #120c10 0%, #0a0a0f 50%, #020203 100%); cursor: pointer; }
+  canvas { position: fixed; inset: 0; z-index: 1; }
+  .content { position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; z-index: 5; pointer-events: none; }
+  .title { font-size: clamp(2.2rem, 7vw, 5.5rem); font-weight: 800; letter-spacing: .04em;
+    background: linear-gradient(90deg, #fff 10%, #ffcaa6 45%, #ff6a00 70%, #ee0979 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 60px rgba(255,106,0,.25); animation: titleIn 1.4s cubic-bezier(.16,1,.3,1) both; }
+  .sub { margin-top: 1.2rem; font-size: clamp(.85rem, 1.6vw, 1.15rem); letter-spacing: .5em;
+    color: rgba(255,255,255,.55); font-weight: 300; padding-left: .5em;
+    animation: titleIn 1.4s cubic-bezier(.16,1,.3,1) .2s both; }
+  @keyframes titleIn { from{opacity:0; transform:translateY(24px); filter:blur(8px)} to{opacity:1; transform:none; filter:none} }
+  .enter { margin-top: 18vh; font-size: clamp(1rem, 2.2vw, 1.5rem); font-weight: 500;
+    letter-spacing: .35em; padding-left: .35em; color: #fff;
+    animation: titleIn 1.4s cubic-bezier(.16,1,.3,1) .5s both, breathe 2.6s ease-in-out 1.9s infinite; }
+  @keyframes breathe {
+    0%,100% { opacity: .25; text-shadow: 0 0 8px rgba(255,255,255,.1); }
+    50%     { opacity: 1;   text-shadow: 0 0 24px rgba(255,138,61,.7), 0 0 48px rgba(238,9,121,.4); }
+  }
+  .ripple { position: fixed; border-radius: 50%; transform: translate(-50%,-50%) scale(0); z-index: 20;
+    background: radial-gradient(circle, rgba(255,138,61,.9) 0%, rgba(238,9,121,.5) 40%, transparent 70%);
+    pointer-events: none; }
+  .ripple.go { animation: ripple 1.1s cubic-bezier(.16,1,.3,1) forwards; }
+  @keyframes ripple { to { transform: translate(-50%,-50%) scale(28); opacity: 0; } }
+  canvas, .content { transition: opacity .9s ease .25s; }
+  body.leaving canvas, body.leaving .content { opacity: 0; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="content">
+    <h1 class="title">YOLO26 FITNESS AGENT</h1>
+    <p class="sub">你的实时 AI 健身教练</p>
+    <div class="enter">点击进入</div>
+  </div>
+<script>
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  let W, H, t = 0;
+  function resize() { W = cv.width = innerWidth; H = cv.height = innerHeight; }
+  resize(); addEventListener('resize', resize);
+  const waves = [
+    { amp: 70, len: .006, sp: .018, y: .52, col: 'rgba(255,106,0,', op: .5, w: 2.5 },
+    { amp: 95, len: .004, sp: .013, y: .58, col: 'rgba(238,9,121,', op: .42, w: 2 },
+    { amp: 55, len: .009, sp: .024, y: .46, col: 'rgba(255,138,61,', op: .35, w: 1.5 },
+    { amp: 120, len: .003, sp: .009, y: .64, col: 'rgba(238,9,121,', op: .25, w: 1.5 },
+  ];
+  function tick() {
+    ctx.clearRect(0, 0, W, H);
+    for (const wv of waves) {
+      ctx.beginPath();
+      for (let x = 0; x <= W; x += 6) {
+        const y = H * wv.y + Math.sin(x * wv.len + t * wv.sp) * wv.amp
+          + Math.sin(x * wv.len * 2.3 + t * wv.sp * 1.7) * wv.amp * .35;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      const g = ctx.createLinearGradient(0, 0, W, 0);
+      g.addColorStop(0, wv.col + '0)'); g.addColorStop(.5, wv.col + wv.op + ')'); g.addColorStop(1, wv.col + '0)');
+      ctx.strokeStyle = g; ctx.lineWidth = wv.w; ctx.shadowColor = wv.col + '1)'; ctx.shadowBlur = 16; ctx.stroke();
+    }
+    ctx.shadowBlur = 0; t++;
+    requestAnimationFrame(tick);
+  }
+  tick();
+  document.body.addEventListener('click', e => {
+    if (document.body.classList.contains('leaving')) return;
+    const r = document.createElement('div'); r.className = 'ripple go';
+    const s = Math.max(W, H) * .12; r.style.width = r.style.height = s + 'px';
+    r.style.left = e.clientX + 'px'; r.style.top = e.clientY + 'px';
+    document.body.appendChild(r); document.body.classList.add('leaving');
+  });
+</script>
+</body>
+</html>

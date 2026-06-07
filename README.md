@@ -185,6 +185,86 @@ RealTimeCoach
   └── RealTimeCoach         → 冷却管理 + 频率限制 + API 调用协调
 ```
 
+## Web 前端（Vue 3 + FastAPI）
+
+> 现代浏览器界面，替代 Tkinter 桌面 GUI。前端 Vue 3 + Vite + TypeScript + TailwindCSS，后端 FastAPI + WebSocket。这是目前主推的交互形态，后续升级请优先基于此。
+
+### 启动全栈
+
+```bash
+# 终端 1：后端（必须在项目根目录运行）
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 终端 2：前端
+cd frontend && npm install && npm run dev
+
+# 浏览器打开 http://localhost:5173，授予摄像头权限
+```
+
+前端 dev server 通过 Vite 代理把 `/ws` 转发到后端 WebSocket、`/api` 转发到 REST（见 `frontend/vite.config.ts`）。
+
+### 数据流
+
+```
+浏览器摄像头 (MediaStream)
+  → useCamera.ts 抽帧 → base64 JPEG ~30fps
+  → WebSocket /ws/detect → 后端 DetectorService (YOLO26 + PoseAnalyzer + ContextEngine)
+  → JSON {keypoints, score, phase, count, errors, guidance, heatmap}
+  → 更新 VideoStage / ScorePanel / JointHeatmap / CorrectionPanel
+
+用户聊天 → POST /api/chat {message, pose_context}
+  → 有 pose_context：LangGraph CoachAgent（教练提示词 → 百炼 DashScope）
+  → 否则：通用 DashScope 调用，失败回退本地 FitnessAgent
+```
+
+### 后端模块（`backend/`）
+
+| 文件 | 职责 |
+|------|------|
+| `main.py` | FastAPI 应用 + CORS，挂载 detect / chat 路由 |
+| `routers/detect.py` | WebSocket `/ws/detect`，处理 `set_exercise` / `reset` / `frame` 消息，懒加载 DetectorService |
+| `routers/chat.py` | REST `POST /api/chat`，有 pose_context 走 LangGraph CoachAgent，否则通用 DashScope / 回退本地 |
+| `services/detector.py` | 封装 YOLO26 + PoseAnalyzer + ContextEngine，`process_frame()` 返回检测结果 |
+| `services/agent_service.py` | FitnessAgent 懒加载单例，延迟 `transformers` 导入到首次聊天 |
+| `schemas.py` | Pydantic 请求/响应模型 |
+
+> 重型 ML 依赖（ultralytics / transformers / torch）全部延迟到首次使用，FastAPI 秒级启动，不在 import 时加载 GB 级模型。
+
+### 前端组件（`frontend/src/components/`）
+
+| 组件 | 职责 |
+|------|------|
+| `EntryScreen.vue` | ★ **入场页**：神经网络粒子 + 赛博地平线融合背景，鼠标吸附高亮交互，编排式逐层入场，点击光晕扩散淡出进入主界面 |
+| `VideoStage.vue` | 主视频显示 + HUD（次数、阶段、计时） |
+| `SkeletonOverlay.vue` | Canvas 骨架叠加，渐变骨骼 + 发光关节，错误关节标红 |
+| `GaugeBar.vue` | CSS 仪表条（角度/时序/对称三维度评分） |
+| `ScorePanel.vue` | 右栏总分 + 环形仪表 |
+| `JointHeatmap.vue` | ★ 关节角度偏离条形图（good/warning/bad 三色） |
+| `CorrectionPanel.vue` | 错误列表 + 严重度指示 |
+| `AiCoach.vue` | AI 教练问答聊天 |
+| `HistoryPanel.vue` | ★ 训练历史列表（从 `/api/session` 拉取） |
+| `PlanPanel.vue` | ★ 用户画像表单 + 周度训练计划生成 |
+| `ControlBar.vue` | 动作选择 + 开始/暂停/重置 |
+| `RingGauge.vue` / `ParticleBackground.vue` | 环形进度 / 粒子背景 |
+
+**Composables**：`useCamera.ts`（摄像头抽帧）、`useWebSocket.ts`（连接管理 + 重连）、`useTrainingState.ts`（idle/running/paused 状态机 + 计时）。
+
+### 本轮前端更新（供后续成员了解进度）
+
+- **新增入场页 `EntryScreen.vue`** — App 加载时全屏覆盖（`z-50`），点击 `enter` 事件后切换到训练界面。融合方案：发光地平线 + 压暗透视网格打底，神经网络粒子浮中层；鼠标 190px 内节点被拉向光标、连线变粗变亮（吸附+高亮）；编排式逐层入场（地平线→网格→粒子组网→标题→「点击进入」呼吸）；点击迸发橙玫光晕扩散并整体淡出。
+  - 工程化：canvas 走 `requestAnimationFrame`，`onUnmounted` 清理 raf / 监听 / timer；支持 `prefers-reduced-motion` 降级（跳过编排与动画，直接显示）；关键帧加 `entry-` 前缀避免冲突。
+  - 接入点：`App.vue` 的 `showEntry` ref 控制显隐。如需「仅首次访问显示」可改用 sessionStorage。
+  - 设计稿存档：`frontend/entry-previews/`（4 种原始风格 + 2 种融合版 + `compare.html` 对比页），最终采用「融合A + 吸附高亮」。
+- **新增 `HistoryPanel.vue` / `PlanPanel.vue` / `JointHeatmap.vue`** — 右栏 Tab 切换（AI教练 / 历史 / 计划），关节热力图独立展示。
+- **修改** `App.vue`（入场页接入 + 会话生命周期 + 三维度评分聚合）、`useWebSocket.ts`（新增 guidance / coach 消息）、`types/index.ts`（`HeatmapData` / `PoseContext` 等类型）、`AiCoach.vue` / `ScorePanel.vue` / `CorrectionPanel.vue` / `VideoStage.vue`。
+
+### 常见问题
+
+- **端口 8000 被占用**：`lsof -ti:8000 | xargs kill -9`
+- **No module named 'backend'**：必须在项目根目录运行 `uvicorn backend.main:app`，不要进 `backend/` 目录
+- **WebSocket 代理连不上**：检查系统 SOCKS 代理是否拦截 localhost，必要时 `NO_PROXY=localhost`
+- **摄像头黑屏**：确认浏览器已授权且无其他程序占用摄像头
+
 ## 运行测试
 
 ```bash

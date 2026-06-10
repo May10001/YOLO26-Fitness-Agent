@@ -20,17 +20,28 @@ from typing import Optional
 
 SYSTEM_PROMPT_CORRECTION = """你是一名拥有10年经验的资深健身教练和运动康复专家。你的任务是根据用户训练中检测到的动作错误，生成专业、具体、可操作的纠正指导。
 
-请遵循以下原则：
+## 输入格式说明
+用户消息是一个 JSON 对象，包含以下字段：
+- exercise: {"cn": "中文名", "en": "英文名"} — 当前动作
+- rep_count: int — 已完成次数
+- phase: str — 当前运动阶段（"向心收缩"/"离心收缩"/"等长保持"/"等待"）
+- score: {"total": 0-100, "angle": 0-40, "temporal": 0-30, "symmetry": 0-30} — 当前评分
+- joint_angles: 各关节角度（°），左右侧分别标注，null 表示该关节不适用
+- errors: [{"name": "错误名", "severity": 1-3, "suggestion": "修正建议"}] — 检测到的错误列表
+- stats: 历史统计，包含 best_score / avg_recent_score / consecutive_good / consecutive_bad / error_ranking
+
+## 指导原则
 1. **安全第一**：始终优先考虑动作安全性，避免加重受伤风险
 2. **具体可操作**：每个建议都要具体到"怎么做"，而不是只说"注意XX"
-3. **解释原因**：简短解释为什么这个错误有害，让用户理解并重视
-4. **鼓励性语气**：用鼓励和正面的方式表达，不要让用户感到挫败
-5. **分级指导**：根据错误严重程度调整语气的紧迫感
+3. **数据驱动**：参考 joint_angles 中的具体角度值和 score 评分，给出量化反馈
+4. **解释原因**：简短解释为什么这个错误有害，让用户理解并重视
+5. **鼓励性语气**：用鼓励和正面的方式表达，不要让用户感到挫败
+6. **分级指导**：根据错误严重程度调整语气的紧迫感
    - 严重度1（轻微）：温和提醒
    - 严重度2（中等）：明确指出，给出2-3个具体改进方法
    - 严重度3（危险）：严肃警告，要求立即调整
-6. **个性化**：结合动作类型和用户可能的训练水平给出恰当建议
-7. **语言要求**：用中文回答，口语化但不失专业，每条指导80-200字"""
+7. **个性化**：结合动作类型、stats 中的历史数据和用户可能的训练水平给出恰当建议
+8. **语言要求**：用中文回答，口语化但不失专业，每条指导80-200字"""
 
 SYSTEM_PROMPT_PLANNING = """你是一名专业的健身训练计划制定师，拥有运动科学硕士学位和ACE/NSCA认证。
 
@@ -54,51 +65,136 @@ SYSTEM_PROMPT_PLANNING = """你是一名专业的健身训练计划制定师，�
 CORRECTION_FEWSHOT = [
     {
         "input": {
-            "exercise": "深蹲",
-            "detected_error": "膝盖内扣",
-            "severity": 2,
-            "phase": "低位",
-            "score": 55,
+            "exercise": {"cn": "深蹲", "en": "squat"},
+            "rep_count": 6,
+            "phase": "离心收缩",
+            "score": {"total": 55, "angle": 20, "temporal": 20, "symmetry": 15},
+            "joint_angles": {
+                "knee": {"left": 75, "right": 68},
+                "hip": {"left": 65, "right": 70},
+                "elbow": {"left": None, "right": None},
+                "shoulder": {"left": None, "right": None},
+                "trunk": 30,
+                "ankle": {"left": 25, "right": 28},
+            },
+            "errors": [
+                {"name": "膝盖内扣", "severity": 2, "suggestion": "保持膝盖与脚尖方向一致"}
+            ],
+            "stats": {
+                "best_score": 72,
+                "avg_recent_score": 58,
+                "consecutive_good": 0,
+                "consecutive_bad": 3,
+                "error_ranking": {"膝盖内扣": 5, "深度不足": 2},
+            },
         },
         "output": "深蹲时膝盖出现了内扣，这会让膝关节内侧副韧带承受额外的压力，长期如此可能导致膝盖疼痛或受伤。请在下一次深蹲时有意识地将膝盖向外打开，确保膝盖始终指向第二脚趾的方向。如果感觉难以控制，可以试试在膝盖上方套一根弹力带，下蹲时抵抗弹力带的拉力主动向外撑开——这会激活你的臀中肌，帮助膝盖保持正确位置。建议先减少下蹲深度和次数，等膝盖轨迹稳定后再逐步增加。",
     },
     {
         "input": {
-            "exercise": "俯卧撑",
-            "detected_error": "塌腰/髋部下塌",
-            "severity": 2,
-            "phase": "低位",
-            "score": 48,
+            "exercise": {"cn": "俯卧撑", "en": "push-up"},
+            "rep_count": 4,
+            "phase": "离心收缩",
+            "score": {"total": 48, "angle": 18, "temporal": 15, "symmetry": 15},
+            "joint_angles": {
+                "knee": {"left": None, "right": None},
+                "hip": {"left": 155, "right": 150},
+                "elbow": {"left": 85, "right": 88},
+                "shoulder": {"left": 55, "right": 58},
+                "trunk": 12,
+                "ankle": {"left": None, "right": None},
+            },
+            "errors": [
+                {"name": "塌腰/髋部下塌", "severity": 2, "suggestion": "收紧核心和臀部，保持身体一条直线"}
+            ],
+            "stats": {
+                "best_score": 65,
+                "avg_recent_score": 52,
+                "consecutive_good": 0,
+                "consecutive_bad": 2,
+                "error_ranking": {"塌腰/髋部下塌": 4, "肘部外展": 2},
+            },
         },
         "output": "做俯卧撑时你的髋部下塌了，这会让腰椎受力过大，不仅没有有效锻炼核心，还可能引起下背部疼痛。调整方法：先收紧臀部（像夹一张纸），再收紧腹部（把肚脐往脊椎方向吸），让你的身体从肩膀到脚踝形成一条笔直的线。如果你发现很难保持，说明目前的核心力量还不足以支撑标准俯卧撑——那完全没关系，可以先从跪姿俯卧撑开始，把动作做标准再进阶。",
     },
     {
         "input": {
-            "exercise": "平板支撑",
-            "detected_error": "髋部下塌",
-            "severity": 1,
-            "phase": "保持",
-            "score": 62,
+            "exercise": {"cn": "平板支撑", "en": "plank"},
+            "rep_count": 0,
+            "phase": "等长保持",
+            "score": {"total": 62, "angle": 25, "temporal": 22, "symmetry": 15},
+            "joint_angles": {
+                "knee": {"left": None, "right": None},
+                "hip": {"left": 170, "right": 168},
+                "elbow": {"left": 90, "right": 92},
+                "shoulder": {"left": 85, "right": 87},
+                "trunk": 8,
+                "ankle": {"left": None, "right": None},
+            },
+            "errors": [
+                {"name": "髋部下塌", "severity": 1, "suggestion": "收紧腹部和臀部，避免髋部下垂"}
+            ],
+            "stats": {
+                "best_score": 70,
+                "avg_recent_score": 65,
+                "consecutive_good": 1,
+                "consecutive_bad": 1,
+                "error_ranking": {"髋部下塌": 3},
+            },
         },
         "output": "平板支撑时髋部有轻微下塌，虽然不算严重，但会让腰椎开始受力。小调整：把肚脐向脊椎方向微微收紧，同时臀部轻轻夹紧。想象你的身体是一块木板——从头到脚踝，任何一点都不能下垂。如果调整后还是控制不住，没关系，缩短时间到你能保持完美姿势的时长，然后分多组来做。20秒的标准平板支撑 > 60秒的变形平板支撑。",
     },
     {
         "input": {
-            "exercise": "卷腹",
-            "detected_error": "颈部用力代偿",
-            "severity": 1,
-            "phase": "低位",
-            "score": 70,
+            "exercise": {"cn": "卷腹", "en": "crunch"},
+            "rep_count": 8,
+            "phase": "向心收缩",
+            "score": {"total": 70, "angle": 28, "temporal": 25, "symmetry": 17},
+            "joint_angles": {
+                "knee": {"left": None, "right": None},
+                "hip": {"left": 55, "right": 58},
+                "elbow": {"left": None, "right": None},
+                "shoulder": {"left": None, "right": None},
+                "trunk": 40,
+                "ankle": {"left": None, "right": None},
+            },
+            "errors": [
+                {"name": "颈部用力代偿", "severity": 1, "suggestion": "双手轻扶耳侧，下巴微收，用腹部发力"}
+            ],
+            "stats": {
+                "best_score": 75,
+                "avg_recent_score": 72,
+                "consecutive_good": 2,
+                "consecutive_bad": 0,
+                "error_ranking": {"颈部用力代偿": 2},
+            },
         },
         "output": "卷腹时检测到你可能在用颈部发力，这样腹肌的锻炼效果会打折扣，还可能导致脖子酸痛。解决方法很简单：双手轻轻放在耳朵两侧，只做'放'的动作，绝对不要用手去'拉'头部。下巴微微收起，和胸口之间保持大约一拳的距离。然后把注意力100%集中在腹部——想象用你的腹肌把胸口往天花板方向卷起，而不是用头去带动。如果还是感觉脖子在用力，可以先交叉双臂放在胸前做。",
     },
     {
         "input": {
-            "exercise": "开合跳",
-            "detected_error": "落地缓冲不足",
-            "severity": 1,
-            "phase": "高位",
-            "score": 65,
+            "exercise": {"cn": "开合跳", "en": "jumping jack"},
+            "rep_count": 15,
+            "phase": "向心收缩",
+            "score": {"total": 65, "angle": 25, "temporal": 22, "symmetry": 18},
+            "joint_angles": {
+                "knee": {"left": None, "right": None},
+                "hip": {"left": None, "right": None},
+                "elbow": {"left": None, "right": None},
+                "shoulder": {"left": 75, "right": 78},
+                "trunk": 10,
+                "ankle": {"left": 15, "right": 18},
+            },
+            "errors": [
+                {"name": "落地缓冲不足", "severity": 1, "suggestion": "落地时膝盖和髋部微屈吸收冲击"}
+            ],
+            "stats": {
+                "best_score": 72,
+                "avg_recent_score": 68,
+                "consecutive_good": 1,
+                "consecutive_bad": 0,
+                "error_ranking": {"落地缓冲不足": 3, "手臂未充分展开": 1},
+            },
         },
         "output": "开合跳落地时缓冲不太够，能听到比较重的落地声对吧？这说明落地时膝盖和髋部没有充分弯曲来吸收冲击力。长期这样对膝关节和踝关节不太友好。调整技巧：落地时想象脚下踩着一个很薄很脆的东西，你要轻轻地踩上去——膝盖和髋部自然微屈，让整个脚掌从脚尖到脚跟像波浪一样滚动落地。可以先缩小跳跃幅度，专注于'轻落地'的感觉，等节奏掌握了再加大幅度。",
     },
@@ -252,7 +348,11 @@ PLANNING_FEWSHOT = [
 
 @dataclass
 class ErrorGuidancePrompt:
-    """Prompt builder for structured error → natural language guidance."""
+    """Prompt builder for structured error → natural language guidance.
+
+    The user message is a JSON string containing full coaching context:
+    exercise info, rep count, phase, scores, joint angles, errors, and stats.
+    """
 
     system_prompt: str = SYSTEM_PROMPT_CORRECTION
     fewshot_examples: list[dict] = field(default_factory=lambda: CORRECTION_FEWSHOT)
@@ -261,64 +361,54 @@ class ErrorGuidancePrompt:
     def build_system_message(self) -> dict:
         return {"role": "system", "content": self.system_prompt}
 
-    def build_user_message(
-        self,
-        exercise: str,
-        detected_error: str,
-        severity: int,
-        phase: str = "",
-        score: float = 0,
-        error_count: int = 0,
-        consecutive_frames: int = 0,
-    ) -> dict:
-        """Build a user message with structured error info."""
-        parts = [f"【动作纠错请求】"]
+    def build_user_message(self, context: dict) -> dict:
+        """Build a user message with JSON coaching context.
 
-        parts.append(f"动作名称：{exercise}")
-        parts.append(f"检测到的错误：{detected_error}")
-        parts.append(f"严重程度：{'⚠ 危险' if severity >= 3 else '⚡ 需要注意' if severity >= 2 else '💡 轻微调整'}")
-        parts.append(f"当前阶段：{phase}" if phase else "")
-        parts.append(f"动作评分：{score:.0f}/100分" if score else "")
-        parts.append(f"本次训练该错误已出现{error_count}次" if error_count else "")
-        parts.append(f"连续检测到{consecutive_frames}帧" if consecutive_frames else "")
+        Args:
+            context: A dict matching the coach context schema:
+                {
+                    "exercise": {"cn": str, "en": str},
+                    "rep_count": int,
+                    "phase": str,
+                    "score": {"total": float, "angle": float, "temporal": float, "symmetry": float},
+                    "joint_angles": {...},
+                    "errors": [{"name": str, "severity": int, "suggestion": str}],
+                    "stats": {...},
+                }
 
-        parts.append("\n请给出专业的纠正指导。")
-
-        content = "\n".join(p for p in parts if p)
+        Returns:
+            {"role": "user", "content": "<JSON string>"}
+        """
+        content = json.dumps(context, ensure_ascii=False, indent=2)
         return {"role": "user", "content": content}
 
     def build_fewshot_messages(self) -> list[dict]:
-        """Build few-shot example messages."""
+        """Build few-shot example messages from JSON-format examples."""
         messages = []
         for ex in self.fewshot_examples:
             inp = ex["input"]
-            user_msg = self.build_user_message(
-                exercise=inp["exercise"],
-                detected_error=inp["detected_error"],
-                severity=inp["severity"],
-                phase=inp.get("phase", ""),
-                score=inp.get("score", 0),
-            )
-            messages.append(user_msg)
+            messages.append(self.build_user_message(inp))
             messages.append({"role": "assistant", "content": ex["output"]})
         return messages
 
     def build_full_messages(
         self,
-        exercise: str,
-        detected_error: str,
-        severity: int,
-        phase: str = "",
-        score: float = 0,
+        context: dict,
         use_fewshot: bool = True,
     ) -> list[dict]:
-        """Build complete message list for LLM call."""
+        """Build complete message list for LLM call.
+
+        Args:
+            context: Full coaching context dict (see build_user_message).
+            use_fewshot: Whether to prepend few-shot examples.
+
+        Returns:
+            List of message dicts ready for LLM API call.
+        """
         messages = [self.build_system_message()]
         if use_fewshot:
             messages.extend(self.build_fewshot_messages())
-        messages.append(self.build_user_message(
-            exercise, detected_error, severity, phase, score,
-        ))
+        messages.append(self.build_user_message(context))
         return messages
 
 
@@ -430,9 +520,10 @@ class FewShotSelector:
         self.max_examples = max_examples
 
     def select_by_exercise(self, exercise: str) -> list[dict]:
-        """Select examples matching the given exercise."""
+        """Select examples matching the given exercise name (Chinese or English)."""
         matching = [e for e in self.examples
-                    if e["input"].get("exercise", "") == exercise]
+                    if e["input"].get("exercise", {}).get("cn", "") == exercise
+                    or e["input"].get("exercise", {}).get("en", "") == exercise]
         if matching:
             return matching[:self.max_examples]
         return random.sample(self.examples, min(self.max_examples, len(self.examples)))
@@ -460,28 +551,24 @@ class PromptBuilder:
 
     def build_correction_prompt(
         self,
-        exercise: str,
-        detected_error: str,
-        severity: int,
-        phase: str = "",
-        score: float = 0,
+        context: dict,
     ) -> list[dict]:
-        """Build a correction prompt with dynamic few-shot selection."""
+        """Build a correction prompt with dynamic few-shot selection.
+
+        Args:
+            context: Full coaching context dict matching the JSON schema.
+        """
         messages = [self.correction_prompt.build_system_message()]
 
-        # Dynamically select relevant few-shot examples
-        relevant = self.correction_selector.select_by_exercise(exercise)
+        # Dynamically select relevant few-shot examples by exercise name
+        exercise_cn = context.get("exercise", {}).get("cn", "")
+        relevant = self.correction_selector.select_by_exercise(exercise_cn)
         for ex in relevant:
             inp = ex["input"]
-            messages.append(self.correction_prompt.build_user_message(
-                inp["exercise"], inp["detected_error"],
-                inp["severity"], inp.get("phase", ""), inp.get("score", 0),
-            ))
+            messages.append(self.correction_prompt.build_user_message(inp))
             messages.append({"role": "assistant", "content": ex["output"]})
 
-        messages.append(self.correction_prompt.build_user_message(
-            exercise, detected_error, severity, phase, score,
-        ))
+        messages.append(self.correction_prompt.build_user_message(context))
         return messages
 
     def build_planning_prompt(

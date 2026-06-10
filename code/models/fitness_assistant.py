@@ -47,6 +47,7 @@ class FitnessAssistant:
         self,
         user_message: str,
         pose_context: Optional[str] = None,
+        coach_context_json: Optional[dict] = None,
         max_tokens: int = 512,
         temperature: float = 0.7,
     ) -> str:
@@ -56,14 +57,28 @@ class FitnessAssistant:
             user_message: The user's question or command.
             pose_context: Optional string describing the user's current
                           exercise form (from ContextEngine guidance).
+                          Deprecated in favor of coach_context_json.
+            coach_context_json: Optional dict with full coaching context
+                                (exercise, rep_count, phase, score,
+                                 joint_angles, errors, stats).
+                                When provided, it is serialized as JSON
+                                and placed in the user message for the
+                                model to parse.
             max_tokens: Maximum generated tokens.
 
         Returns:
             Fitness advice text.
         """
-        content = user_message
-        if pose_context:
+        import json
+
+        if coach_context_json is not None:
+            # New JSON format: context as structured JSON in user message
+            context_str = json.dumps(coach_context_json, ensure_ascii=False, indent=2)
+            content = f"{context_str}\n\n[用户提问]\n{user_message}"
+        elif pose_context:
             content = f"[实时姿态分析]\n{pose_context}\n\n[用户提问]\n{user_message}"
+        else:
+            content = user_message
 
         messages = [
             {"role": "system", "content": FITNESS_SYSTEM_PROMPT},

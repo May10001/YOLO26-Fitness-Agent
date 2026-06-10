@@ -1,0 +1,12 @@
+{
+  "name": "用户",
+  "age": 25,
+  "weight_kg": 70.0,
+  "height_cm": 170.0,
+  "fitness_level": "beginner",
+  "goal": "general",
+  "equipment": "mat",
+  "medical_notes": "",
+  "exercise_history": {},
+  "created_date": "2026-06-07"
+}

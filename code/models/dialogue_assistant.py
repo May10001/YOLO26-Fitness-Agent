@@ -11,13 +11,14 @@ DIALOGUE_SYSTEM_PROMPT = (
 
 
 class DialogueAssistant:
-    """General-purpose dialogue assistant using base Qwen2.5-0.5B-Instruct.
+    """General-purpose dialogue assistant using base Qwen2.5-Instruct.
 
     No LoRA adapter is loaded. Suitable for open-ended conversation.
     """
 
-    def __init__(self):
-        self.model = BaseModel.get_instance()
+    def __init__(self, model_size: str = "1.5B"):
+        self.model_size = model_size
+        self.model = BaseModel.get_instance(model_size=model_size)
 
     def chat(
         self,

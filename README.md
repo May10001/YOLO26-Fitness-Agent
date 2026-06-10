@@ -1,53 +1,123 @@
 # YOLO26-Fitness-Agent
 
-基于 YOLO26 姿态估计 + LLM 的智能健身教练助手。实时检测运动姿态、识别动作错误，并通过大语言模型生成自然语言纠正指导和个性化训练计划。
+基于 YOLO26 姿态估计 + Qwen2.5-7B LoRA 微调大模型的智能健身教练助手。
+
+实时检测运动姿态、识别动作错误、三维度评分，并通过百炼云端部署的 7B 健身专家模型生成自然语言纠正指导。
+
+## 快速开始
+
+### 环境
+
+```bash
+pip install -r requirements.txt openai dashscope
+```
+
+### 启动健身应用
+
+```bash
+python -m code.workout_app --model yolo26n-pose.pt
+```
+
+首次运行会自动下载 YOLO26 pose 模型（7.5MB）。
+
+### 测试远程 API 连通性
+
+在配置 GUI 之前，先用命令行脚本验证远端模型可正常调用（无需本地 GPU）：
+
+```bash
+# 单次问答测试
+python scripts/test_remote_api.py
+
+# 指定问题
+python scripts/test_remote_api.py -q "如何做标准俯卧撑？"
+
+# 多轮对话模式（输入 /quit 退出）
+python scripts/test_remote_api.py -m
+```
+
+脚本读取 `data/api_config.json` 中的配置，返回中文健身指导即表示连通成功。
+
+### 配置 AI 聊天（组员共用一个远程 API）
+
+启动后在设置面板中：
+
+1. 勾选「启用远程 API 模式」
+2. 填入以下信息：
+
+| 设置项 | 值 |
+|--------|-----|
+| API Key | `sk-427b5295e2884e1183491ee9ab8b5e16` |
+| 模型 Code | `qwen2.5-7b-instruct-d1a1cabf17c2-yzqr` |
+
+状态栏显示 **「7B 远程 API 就绪」** 即配置成功。
+
+> 也可以取消勾选远程模式，启动本地模型（需安装 torch, transformers，首次加载会从 HuggingFace 下载）。
+
+---
 
 ## 项目结构
 
 ```
 YOLO26-Fitness-Agent/
-├── code/                          # 核心代码
-│   ├── agent.py                   # 主编排器 — 统一的 FitnessAgent 接口
-│   ├── pose_analyzer.py           # 姿态分析引擎（角度提取/错误检测/评分/平滑）
-│   ├── visualization.py           # 可视化对比（关节角度热力图）
-│   ├── guidance/                  # 实时指导模块
-│   │   └── context_engine.py      # 上下文感知的逐帧教练引擎
-│   ├── planning/                  # 训练计划模块
-│   │   ├── user_profile.py        # 用户画像（含 JSON 持久化）
-│   │   └── plan_generator.py      # 基于规则的周度训练计划生成
-│   ├── models/                    # LLM 模型封装
-│   │   ├── fitness_assistant.py   # 健身领域助手（Qwen2.5 + LoRA）
-│   │   ├── dialogue_assistant.py  # 通用对话助手
-│   │   └── fine_tuning/           # 微调数据和训练器
-│   ├── model_selection/           # 模型选型模块
-│   │   └── compare.py             # 7 模型对比报告生成器
-│   ├── data_collection/           # 数据采集模块
-│   │   ├── bilibili_scraper.py    # B 站健身视频字幕爬虫
-│   │   ├── keep_scraper.py        # Keep 动作库爬虫
-│   │   └── zhihu_scraper.py       # 知乎健身问答爬虫
-│   ├── data_processing/           # 数据处理模块
-│   │   ├── cleaner.py             # 数据清洗（去重/过滤/正则化）
-│   │   ├── annotator.py           # 自动标注（动作/错误/指导类型）
-│   │   └── pipeline.py            # 端到端数据集构建管线
-│   └── prompt_engineering/        # Prompt 工程模块
-│       ├── templates.py           # 模板 + Few-shot 选择器
-│       └── generator.py           # PromptGenerator 统一接口
-├── data/                          # 数据目录
-│   ├── model_comparison_report.md # 模型选型对比报告
-│   ├── raw/                       # 原始抓取数据
-│   └── processed/                 # 清洗后的 JSON/JSONL 数据集
-├── tests/                         # 单元测试
-│   └── test_pose_analyzer.py      # 姿态分析引擎测试（44 个用例）
-├── workingout_monitoring.py       # Tkinter GUI 实时健身监测应用
-└── requirements.txt               # 项目依赖
+├── code/
+│   ├── workout_app.py               # ★ 主应用：多线程实时健身监控 GUI
+│   ├── pose_analyzer.py             # 姿态分析引擎（角度/错误/评分/平滑）
+│   ├── visualization.py             # 关节角度热力图对比
+│   ├── agent.py                     # FitnessAgent 统一接口
+│   ├── realtime_coach.py            # ★ 实时 LLM 教练引擎（触发判断+上下文+频率控制）
+│   ├── coach_system_prompt.py       # ★ 微调教练模型系统提示词
+│   ├── guidance/
+│   │   └── context_engine.py        # 逐帧教练指导引擎（规则驱动）
+│   ├── planning/
+│   │   ├── user_profile.py          # 用户画像（JSON 持久化）
+│   │   └── plan_generator.py        # 周度训练计划生成
+│   ├── models/
+│   │   ├── base_model.py            # Qwen2.5 多规格基座模型加载器
+│   │   ├── fitness_assistant.py     # 健身领域助手（支持 LoRA）
+│   │   ├── dialogue_assistant.py    # 通用对话助手
+│   │   └── fine_tuning/
+│   │       ├── trainer.py           # LoRA 微调训练器
+│   │       ├── prepare_data.py      # 数据集格式转换
+│   │       └── fitness_data.py      # 内置手写数据集
+│   ├── model_selection/             # 模型选型模块
+│   ├── data_collection/             # B 站/Keep/知乎 数据采集
+│   ├── data_processing/             # 数据处理管线（清洗/标注/构建）
+│   └── prompt_engineering/          # Prompt 工程（模板 + Few-shot）
+├── scripts/
+│   └── test_remote_api.py           # 远程 API 连通性测试脚本
+├── data/
+│   ├── api_config.example.json      # 远程 API 配置模板
+│   ├── processed/                   # 1626 条健身数据集
+│   └── training_history/            # 训练历史会话记录
+├── doc/                             # 论文模版
+├── tests/
+│   └── test_pose_analyzer.py        # 姿态分析单元测试（44 用例）
+├── ft.md                            # 服务器微调操作指南
+├── FINE_TUNING.md                   # LoRA 微调技术文档
+├── 免部署-上传LoRA权重调用指南.md     # 百炼免部署调用指南
+└── requirements.txt
 ```
 
-## 功能模块
+---
 
-### 1. 姿态分析引擎 (`code/pose_analyzer.py`)
+## 主应用功能 (`code/workout_app.py`)
 
-- 17 个 COCO 关键点 → 10 个关节角度提取
-- **10 个核心动作标准参数**：
+| 功能 | 说明 |
+|------|------|
+| 实时姿态检测 | YOLO26 17 关键点 → 骨架叠加 + 关节点标注 |
+| 10 种动作支持 | 深蹲/俯卧撑/平板支撑/卷腹/开合跳/引体向上/臀桥/高抬腿/肩推/侧平举 |
+| 三维度评分 | 关节角度 40 分 + 时序一致性 30 分 + 对称性 30 分 |
+| 错误实时检测 | 膝盖内扣/塌腰/弓背/颈部代偿/肘外展/身体摆动等 10+ 类 |
+| 开始/暂停/停止 | 状态机控制，暂停时冻结检测线程 |
+| 训练历史 | JSON 持久化，弹窗 Treeview 查看 |
+| **AI 聊天助手** | **Qwen2.5-7B LoRA 健身专家，百炼云端推理免部署** |
+| **实时 LLM 教练** | **逐帧接收评分/角度/错误，主动推送纠正指导到聊天面板** |
+| 多线程架构 | 检测线程 + UI 线程分离，目标 ≥30fps |
+| 离线模式 | 本地 YOLO + 可选本地 LLM，无网络也能用 |
+
+---
+
+## 10 个动作标准参数
 
 | # | 动作 | 主监测关节 | 低位→高位 | 计数触发 |
 |---|------|-----------|----------|----------|
@@ -62,129 +132,155 @@ YOLO26-Fitness-Agent/
 | 9 | 肩推 | elbow_angle | 70°→170° | 高位 |
 | 10 | 侧平举 | shoulder_angle | 10°→90° | 高位 |
 
-- **三维度动作评分算法**（角度 40 分 + 时序 30 分 + 对称性 30 分）
-- **时序平滑处理**：EMA 角度平滑 + 中值滤波 + 得分帧间平滑，减少单帧关键点抖动误差
-- **10+ 类常见错误实时检测**（膝盖内扣/塌腰/弓背/颈部代偿/手臂不充分/身体摆动/臀桥不对称/身体后仰/肩推弓背/借力晃动）
+---
 
-### 2. 可视化对比 (`code/visualization.py`)
+## AI 聊天架构
 
-- **JointAngleHeatmap** — 标准动作 vs 用户关节角度热力图对比
-- 偏离度矩阵计算（good / warning / bad 三级分类）
-- ASCII 终端热力图输出（无需 matplotlib）
-- 各动作标准参考角度范围定义
-
-### 3. 实时指导引擎 (`code/guidance/context_engine.py`)
-
-- 4 类指导消息：动作纠正、表现反馈、里程碑鼓励、安全警告
-- 上下文状态追踪（连续帧、错误计数、最佳评分）
-- 冷却机制避免重复提示
-
-### 4. 训练计划生成 (`code/planning/plan_generator.py`)
-
-- 基于用户画像的个性化周度计划
-- 渐进式超负荷策略
-- 5 种训练目标：增肌/塑形/耐力/减脂/综合健康
-- 支持分化训练（上下肢/推拉腿/全身）
-
-### 5. 数据采集管线 (`code/data_collection/`)
-
-| 数据源 | 内容 | 爬虫状态 |
-|--------|------|----------|
-| B 站健身区 | 热门教程 CC 字幕 | API 框架 + 合成数据 |
-| Keep 动作库 | 30+ 动作要领 + 常见错误 | API 框架 + 合成数据 |
-| 知乎健身话题 | 高质量 Q&A | API 框架 + 合成数据 |
-
-> 由于 B 站/Keep/知乎需要登录态，本仓库提供完整的爬虫框架和丰富的合成数据用于离线开发和测试。
-
-### 6. 数据处理管线 (`code/data_processing/`)
-
-- 文本清洗：全角→半角、空白规范化、控制字符过滤
-- 精确 + 模糊去重（SequenceMatcher, 阈值 0.85）
-- 中文比例过滤
-- 自动标注：动作类型（28 类）、错误类型（20 类）、指导类型、难度、目标肌群
-- **输出数据集**：1626 条样本（~1000 动作纠错 + 500 训练规划 + 130 问答）
-
-### 7. Prompt 工程 (`code/prompt_engineering/`)
-
-两个核心 Prompt 模板：
-
-**ErrorGuidancePrompt** — 结构化错误 → 自然语言指导
 ```
-输入: {exercise: "深蹲", error: "膝盖内扣", severity: 2, phase: "低位", score: 55}
-输出: "深蹲时膝盖出现了内扣，这会让膝关节内侧副韧带承受额外的压力..."
+workout_app 聊天面板
+    │
+    ├── 远程模式（推荐）→ OpenAI 兼容 API → 阿里云百炼 → Qwen2.5-7B + LoRA
+    │
+    └── 本地模式 → BaseModel → Qwen2.5 0.5B~7B（需 torch, transformers）
+
+实时 LLM 教练触发生成
+    │
+    └── DetectionThread 每帧 → PoseAnalyzer → RealTimeCoach
+          ├── 触发判断（严重错误/评分骤降/里程碑/个人最佳）
+          ├── 频率控制（全局≥6s，按类型 8-30s 冷却）
+          ├── 构建结构化上下文 → 远程 API → 聊天框主动推送
+          └── 用户提问时自动附带当前训练数据
 ```
 
-**PlanningPrompt** — 用户画像 → 周度训练计划
+**远程模式优势**：无需本地 GPU，百炼托管 GPU 推理，最小实例数 0 自动缩零节省费用。
+
+---
+
+## 实时 LLM 教练
+
+训练过程中，系统会将每帧的姿态数据（评分、关节角度、检测到的错误、训练统计）编码为结构化上下文，通过远程 API 发送给微调过的 Qwen2.5-7B 健身专家模型。模型会在聊天面板中**主动推送**专业指导。
+
+### 触发规则
+
+| 触发条件 | 冷却时间 | 说明 |
+|---------|---------|------|
+| 严重错误 (severity≥2 持续5帧+) | 8s | 如膝盖内扣、塌腰、关节过伸 |
+| 评分骤降 (比最佳低15分+) | 10s | 动作质量显著下降时提醒 |
+| 个人最佳 (超最佳5分+) | 15s | 突破自我时给予表扬 |
+| 次数里程碑 (5/10/15/20/30/50/100) | 20s | 达到目标次数时鼓励 |
+| 连续标准 10+ 次 | 30s | 长期保持标准姿势时肯定 |
+
+**全局限制**：两次主动推送≥6秒，每会话最多 20 次，防止消息轰炸。
+
+### 用户提问
+
+训练中在聊天框输入问题（如"我的深蹲怎么样？"），系统会自动附带当前训练数据（动作名、次数、总分、最佳分、检测错误），让模型给出结合实时状态的个性化回答。
+
+### 架构
+
 ```
-输入: {age: 25, weight: 70, goal: "weight_loss", equipment: "none", ...}
-输出: "📋 个人减脂训练计划（4周）\n## 周一（全身基础训练）\n..."
+RealTimeCoach
+  ├── CoachContextBuilder   → AnalysisResult → 结构化中文上下文
+  ├── CoachTriggerEvaluator → 触发规则 + 优先级排序
+  └── RealTimeCoach         → 冷却管理 + 频率限制 + API 调用协调
 ```
 
-支持动态 Few-shot 选择、LLM 调用和规则回退。
+## Web 前端（Vue 3 + FastAPI）
 
-### 8. 模型选型对比 (`code/model_selection/compare.py`)
+> 现代浏览器界面，替代 Tkinter 桌面 GUI。前端 Vue 3 + Vite + TypeScript + TailwindCSS，后端 FastAPI + WebSocket。这是目前主推的交互形态，后续升级请优先基于此。
 
-对比了 7 个中文开源模型，评估维度：
-- VRAM 需求（FP16/INT8/INT4）
-- 推理速度（RTX 4060/4090）
-- C-Eval / CMMLU / HumanEval-CN 基准
-- 中文健身领域综合评分
-
-详见 `data/model_comparison_report.md`。
-
-## 快速开始
-
-### 环境
+### 启动全栈
 
 ```bash
-pip install -r requirements.txt
+# 终端 1：后端（必须在项目根目录运行）
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 终端 2：前端
+cd frontend && npm install && npm run dev
+
+# 浏览器打开 http://localhost:5173，授予摄像头权限
 ```
 
-### 实时健身监测（GUI）
+前端 dev server 通过 Vite 代理把 `/ws` 转发到后端 WebSocket、`/api` 转发到 REST（见 `frontend/vite.config.ts`）。
 
-```bash
-python workingout_monitoring.py --model yolo26n-pose.pt
+### 数据流
+
+```
+浏览器摄像头 (MediaStream)
+  → useCamera.ts 抽帧 → base64 JPEG ~30fps
+  → WebSocket /ws/detect → 后端 DetectorService (YOLO26 + PoseAnalyzer + ContextEngine)
+  → JSON {keypoints, score, phase, count, errors, guidance, heatmap}
+  → 更新 VideoStage / ScorePanel / JointHeatmap / CorrectionPanel
+
+用户聊天 → POST /api/chat {message, pose_context}
+  → 有 pose_context：LangGraph CoachAgent（教练提示词 → 百炼 DashScope）
+  → 否则：通用 DashScope 调用，失败回退本地 FitnessAgent
 ```
 
-### 运行单元测试
+### 后端模块（`backend/`）
+
+| 文件 | 职责 |
+|------|------|
+| `main.py` | FastAPI 应用 + CORS，挂载 detect / chat 路由 |
+| `routers/detect.py` | WebSocket `/ws/detect`，处理 `set_exercise` / `reset` / `frame` 消息，懒加载 DetectorService |
+| `routers/chat.py` | REST `POST /api/chat`，有 pose_context 走 LangGraph CoachAgent，否则通用 DashScope / 回退本地 |
+| `services/detector.py` | 封装 YOLO26 + PoseAnalyzer + ContextEngine，`process_frame()` 返回检测结果 |
+| `services/agent_service.py` | FitnessAgent 懒加载单例，延迟 `transformers` 导入到首次聊天 |
+| `schemas.py` | Pydantic 请求/响应模型 |
+
+> 重型 ML 依赖（ultralytics / transformers / torch）全部延迟到首次使用，FastAPI 秒级启动，不在 import 时加载 GB 级模型。
+
+### 前端组件（`frontend/src/components/`）
+
+| 组件 | 职责 |
+|------|------|
+| `EntryScreen.vue` | ★ **入场页**：神经网络粒子 + 赛博地平线融合背景，鼠标吸附高亮交互，编排式逐层入场，点击光晕扩散淡出进入主界面 |
+| `VideoStage.vue` | 主视频显示 + HUD（次数、阶段、计时） |
+| `SkeletonOverlay.vue` | Canvas 骨架叠加，渐变骨骼 + 发光关节，错误关节标红 |
+| `GaugeBar.vue` | CSS 仪表条（角度/时序/对称三维度评分） |
+| `ScorePanel.vue` | 右栏总分 + 环形仪表 |
+| `JointHeatmap.vue` | ★ 关节角度偏离条形图（good/warning/bad 三色） |
+| `CorrectionPanel.vue` | 错误列表 + 严重度指示 |
+| `AiCoach.vue` | AI 教练问答聊天 |
+| `HistoryPanel.vue` | ★ 训练历史列表（从 `/api/session` 拉取） |
+| `PlanPanel.vue` | ★ 用户画像表单 + 周度训练计划生成 |
+| `ControlBar.vue` | 动作选择 + 开始/暂停/重置 |
+| `RingGauge.vue` / `ParticleBackground.vue` | 环形进度 / 粒子背景 |
+
+**Composables**：`useCamera.ts`（摄像头抽帧）、`useWebSocket.ts`（连接管理 + 重连）、`useTrainingState.ts`（idle/running/paused 状态机 + 计时）。
+
+### 本轮前端更新（供后续成员了解进度）
+
+- **新增入场页 `EntryScreen.vue`** — App 加载时全屏覆盖（`z-50`），点击 `enter` 事件后切换到训练界面。融合方案：发光地平线 + 压暗透视网格打底，神经网络粒子浮中层；鼠标 190px 内节点被拉向光标、连线变粗变亮（吸附+高亮）；编排式逐层入场（地平线→网格→粒子组网→标题→「点击进入」呼吸）；点击迸发橙玫光晕扩散并整体淡出。
+  - 工程化：canvas 走 `requestAnimationFrame`，`onUnmounted` 清理 raf / 监听 / timer；支持 `prefers-reduced-motion` 降级（跳过编排与动画，直接显示）；关键帧加 `entry-` 前缀避免冲突。
+  - 接入点：`App.vue` 的 `showEntry` ref 控制显隐。如需「仅首次访问显示」可改用 sessionStorage。
+  - 设计稿存档：`frontend/entry-previews/`（4 种原始风格 + 2 种融合版 + `compare.html` 对比页），最终采用「融合A + 吸附高亮」。
+- **新增 `HistoryPanel.vue` / `PlanPanel.vue` / `JointHeatmap.vue`** — 右栏 Tab 切换（AI教练 / 历史 / 计划），关节热力图独立展示。
+- **修改** `App.vue`（入场页接入 + 会话生命周期 + 三维度评分聚合）、`useWebSocket.ts`（新增 guidance / coach 消息）、`types/index.ts`（`HeatmapData` / `PoseContext` 等类型）、`AiCoach.vue` / `ScorePanel.vue` / `CorrectionPanel.vue` / `VideoStage.vue`。
+
+### 常见问题
+
+- **端口 8000 被占用**：`lsof -ti:8000 | xargs kill -9`
+- **No module named 'backend'**：必须在项目根目录运行 `uvicorn backend.main:app`，不要进 `backend/` 目录
+- **WebSocket 代理连不上**：检查系统 SOCKS 代理是否拦截 localhost，必要时 `NO_PROXY=localhost`
+- **摄像头黑屏**：确认浏览器已授权且无其他程序占用摄像头
+
+## 运行测试
 
 ```bash
+# 姿态分析自测
+python -m code.pose_analyzer
+
+# 可视化模块自测
+python -m code.visualization
+
+# 单元测试（需 pytest）
 python -m pytest tests/test_pose_analyzer.py -v
 ```
 
-### 运行自测
+---
 
-```bash
-python -m code.pose_analyzer     # 姿态分析引擎自测
-python -m code.visualization     # 可视化模块自测
-```
-
-### 生成微调数据集
-
-```bash
-python -m code.data_processing.pipeline
-# → data/processed/fitness_dataset.jsonl
-```
-
-### 使用 Prompt 生成器
-
-```python
-from code.prompt_engineering import PromptGenerator
-
-gen = PromptGenerator()
-
-# 动作纠错
-result = gen.generate_correction("深蹲", "膝盖内扣", severity=2)
-print(result.output_text)
-
-# 训练计划
-result = gen.generate_plan(
-    age=25, weight_kg=70, height_cm=170, gender="男",
-    fitness_level="beginner", goal="weight_loss",
-    equipment="none", days_per_week=3,
-)
-print(result.output_text)
-```
+## 示例代码
 
 ### 使用 FitnessAgent 统一接口
 
@@ -209,7 +305,27 @@ plan = agent.generate_plan()
 print(plan)
 ```
 
-### 可视化对比
+### 使用 Prompt 生成器
+
+```python
+from code.prompt_engineering import PromptGenerator
+
+gen = PromptGenerator()
+
+# 动作纠错
+result = gen.generate_correction("深蹲", "膝盖内扣", severity=2)
+print(result.output_text)
+
+# 训练计划
+result = gen.generate_plan(
+    age=25, weight_kg=70, height_cm=170, gender="男",
+    fitness_level="beginner", goal="weight_loss",
+    equipment="none", days_per_week=3,
+)
+print(result.output_text)
+```
+
+### 可视化热力图
 
 ```python
 from code.visualization import JointAngleHeatmap, generate_ascii_heatmap
@@ -219,25 +335,122 @@ hm = JointAngleHeatmap("深蹲")
 angles = JointAngles(knee_left=90, knee_right=92, hip_left=82, hip_right=80)
 hm.record_frame(angles)
 
-# 终端热力图
 matrix = hm.compute_deviation_matrix()
 print(generate_ascii_heatmap(matrix))
 
-# 偏离摘要
 summary = hm.get_summary()
 print(f"总偏离: {summary['overall_deviation']}°")
 ```
 
-### 生成模型对比报告
+### 本地模型推理
 
-```bash
-python -m code.model_selection.compare
-# → data/model_comparison_report.md
+```python
+from code.models.base_model import BaseModel
+
+model = BaseModel.get_instance(model_size="0.5B")
+reply = model.chat([
+    {"role": "system", "content": "你是专业的健身教练。请用中文回答。"},
+    {"role": "user", "content": "深蹲膝盖内扣怎么办？"},
+])
+print(reply)
 ```
 
-## 数据集格式
+### 加载微调 LoRA 适配器
 
-每条样本为 JSON 对象：
+```python
+from code.models.base_model import BaseModel
+
+model = BaseModel.get_instance(
+    model_size="0.5B",
+    lora_path="lora_fitness_adapter/0.5B_20260521_170305/adapter"
+)
+reply = model.chat([
+    {"role": "user", "content": "俯卧撑手腕疼怎么调整？"},
+])
+print(reply)
+```
+
+### 调用百炼远程 API（OpenAI 兼容）
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="sk-xxxxxxxxxxxxxxxxxxxx",
+    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+)
+
+completion = client.chat.completions.create(
+    model="qwen2.5-7b-instruct-d1a1cabf17c2-yzqr",
+    messages=[
+        {"role": "system", "content": "你是专业的健身教练。"},
+        {"role": "user", "content": "减脂期每天应该摄入多少蛋白质？"},
+    ],
+    temperature=0.7,
+    max_tokens=500,
+)
+
+print(completion.choices[0].message.content)
+```
+
+### 用户画像与训练计划
+
+```python
+from code.planning.user_profile import UserProfile, FitnessLevel, FitnessGoal, Equipment
+from code.planning.plan_generator import PlanGenerator
+
+profile = UserProfile(
+    name="张三",
+    age=25, weight_kg=72, height_cm=175,
+    fitness_level=FitnessLevel.INTERMEDIATE,
+    goal=FitnessGoal.STRENGTH,
+    equipment=Equipment.DUMBBELLS,
+)
+profile.save()
+
+plan = PlanGenerator(profile).generate_weekly_plan()
+print(plan.to_text())
+```
+
+### 生成微调数据集
+
+```bash
+# 生成数据集（从爬虫数据 + 合成数据）
+python -m code.data_processing.pipeline
+# → data/processed/fitness_dataset.jsonl (1626 条)
+
+# 转换为训练格式
+python -m code.models.fine_tuning.prepare_data
+# → data/processed/training_data.jsonl (1464 条)
+# → data/processed/eval_data.jsonl (162 条)
+```
+
+### 微调训练
+
+```bash
+# 本地快速测试（0.5B + 内置数据 + 1 epoch，CPU 约 5 分钟）
+HF_ENDPOINT=https://hf-mirror.com python -m code.models.fine_tuning.trainer \
+    --model 0.5B --use-builtin-data --epochs 1 --batch-size 1
+
+# 完整微调（1.5B + 全量数据 + 3 epoch，需 GPU）
+HF_ENDPOINT=https://hf-mirror.com python -m code.models.fine_tuning.trainer \
+    --model 1.5B --epochs 3 --batch-size 2
+```
+
+> 服务器微调详细指南见 [ft.md](ft.md)。组员已微调的 7B LoRA 适配器在 [ModelScope](https://www.modelscope.cn/models/gwendii/Qwen2.5-7B-fitness/files)。
+
+---
+
+## 数据集
+
+| 类型 | 数量 | 内容 |
+|------|------|------|
+| 动作纠错 | ~1000 | 10 动作 × 多种错误 × 模板变体 |
+| 训练规划 | ~500 | 多种用户画像的周度计划 |
+| 健身问答 | ~86 | 手写专业对话 |
+| 知识数据 | ~28 | Keep 动作库合成数据 |
+
+数据集格式：
 
 ```json
 {
@@ -246,36 +459,28 @@ python -m code.model_selection.compare
   "exercise": "深蹲",
   "error": "膝盖内扣",
   "severity": 2,
-  "trigger_condition": "深蹲时膝盖向内扣，髌骨未对准第二脚趾",
-  "input": {
-    "exercise": "深蹲",
-    "detected_error": "膝盖内扣",
-    "severity": 2,
-    "trigger": "深蹲时膝盖向内扣..."
-  },
-  "output": "深蹲时膝盖出现了内扣...",
-  "annotation": {
-    "exercise_type": "深蹲",
-    "error_types": ["膝盖内扣"],
-    "guidance_type": "动作纠错",
-    "difficulty": "初级"
-  }
+  "input": {"exercise": "深蹲", "detected_error": "膝盖内扣", "severity": 2},
+  "output": "深蹲时膝盖出现了内扣..."
 }
 ```
 
-## 模型选型建议
+---
 
-| 部署场景 | 推荐模型 | 量化 | 显存 | 推理延迟 |
-|----------|----------|------|------|----------|
-| 边缘端实时纠错 | Qwen2.5-1.5B | INT4 | ~1GB | <30ms |
-| 移动端离线部署 | Qwen2.5-0.5B | INT4 | ~0.3GB | <50ms |
-| 服务器规划生成 | Qwen2.5-7B | INT8 | ~8GB | <2s |
-| 深度健身问答 | Qwen2.5-7B | FP16 | ~14GB | <3s |
+## 模型选型
+
+| 部署场景 | 推荐模型 | 显存 | 调用方式 |
+|----------|----------|------|----------|
+| **远程 API（推荐）** | Qwen2.5-7B + LoRA | 0（百炼托管） | OpenAI 兼容 |
+| 边缘端实时 | Qwen2.5-0.5B | ~1GB | 本地加载 |
+| 消费级 GPU | Qwen2.5-1.5B | ~3GB | 本地 / QLoRA |
+| 服务器质量 | Qwen2.5-7B | ~14GB | 本地 / 云端 |
+
+---
 
 ## 依赖
 
 ```
-torch>=2.0.0
+torch>=2.0.0          # 本地模型推理（可选，远程模式不需要）
 transformers>=4.40.0
 peft>=0.8.0
 trl>=0.8.0
@@ -284,6 +489,8 @@ ultralytics>=8.0.0
 opencv-python>=4.8.0
 numpy>=1.24.0
 Pillow>=10.0.0
+openai                 # 百炼远程 API 调用
+dashscope              # 百炼 SDK（可选）
 ```
 
 ## License

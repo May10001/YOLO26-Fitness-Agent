@@ -1,0 +1,199 @@
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0a0a0a; font-family:-apple-system,BlinkMacSystemFont,sans-serif; color:#fff; overflow-x:hidden; }
+  .page { display:flex; height:100vh; padding:12px; gap:12px; }
+  .main { flex:2.2; display:flex; flex-direction:column; gap:12px; }
+  .sidebar { flex:1; display:flex; flex-direction:column; gap:10px; max-width:360px; }
+
+  .video-container {
+    flex:1; border-radius:16px; overflow:hidden; position:relative;
+    background:linear-gradient(135deg,#1a1a1a,#0d0d0d);
+    border:1px solid rgba(255,106,0,0.15);
+    box-shadow:0 0 40px rgba(255,106,0,0.08);
+  }
+  .video-placeholder {
+    width:100%;height:100%;
+    background:linear-gradient(135deg,rgba(255,106,0,0.05),rgba(238,9,121,0.03));
+    display:flex;align-items:center;justify-content:center;
+    font-size:14px;color:#555;
+  }
+  .video-hud-top {
+    position:absolute;top:16px;left:16px;right:16px;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .badge-live {
+    background:linear-gradient(135deg,#ff6a00,#ee0979);
+    padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;
+    box-shadow:0 0 15px rgba(255,106,0,0.4);
+  }
+  .badge-exercise {
+    background:rgba(255,255,255,0.1);backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,0.15);
+    padding:5px 14px;border-radius:20px;font-size:11px;color:#fff;
+  }
+  .video-hud-bottom {
+    position:absolute;bottom:16px;left:16px;right:16px;
+    display:flex;gap:8px;
+  }
+  .hud-stat {
+    background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,0.08);
+    padding:8px 14px;border-radius:10px;font-size:11px;color:#ccc;
+  }
+  .hud-stat span { color:#ff6a00;font-weight:700; }
+
+  .controls {
+    height:56px;display:flex;align-items:center;gap:10px;
+    padding:0 16px;border-radius:12px;
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.06);
+  }
+  .btn-primary {
+    background:linear-gradient(135deg,#ff6a00,#ee0979);
+    border:none;color:#fff;padding:10px 24px;border-radius:10px;
+    font-size:12px;font-weight:700;cursor:pointer;
+    box-shadow:0 0 20px rgba(255,106,0,0.3);
+  }
+  .btn-secondary {
+    background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+    color:#aaa;padding:10px 18px;border-radius:10px;font-size:12px;cursor:pointer;
+  }
+  .exercise-tabs { display:flex;gap:6px;margin-left:auto; }
+  .tab-active {
+    background:linear-gradient(135deg,rgba(255,106,0,0.2),rgba(238,9,121,0.1));
+    border:1px solid rgba(255,106,0,0.3);color:#ff6a00;
+    padding:6px 12px;border-radius:8px;font-size:11px;font-weight:600;
+  }
+  .tab-inactive {
+    background:transparent;border:1px solid rgba(255,255,255,0.08);
+    color:#666;padding:6px 12px;border-radius:8px;font-size:11px;
+  }
+
+  .glow-card {
+    border-radius:14px;padding:16px;
+    background:linear-gradient(135deg,rgba(255,106,0,0.08),rgba(238,9,121,0.04));
+    border:1px solid rgba(255,106,0,0.15);
+    box-shadow:0 0 25px rgba(255,106,0,0.06),0 0 50px rgba(238,9,121,0.03);
+  }
+  .card-label {
+    font-size:10px;text-transform:uppercase;letter-spacing:1.2px;
+    color:rgba(255,106,0,0.7);margin-bottom:8px;font-weight:600;
+  }
+  .score-big {
+    font-size:42px;font-weight:800;
+    background:linear-gradient(90deg,#ff6a00,#ee0979);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    line-height:1;
+  }
+  .score-sub { font-size:11px;color:#666;margin-top:4px; }
+
+  .score-breakdown { display:flex;gap:8px;margin-top:12px; }
+  .score-dim {
+    flex:1;text-align:center;padding:8px 4px;
+    background:rgba(255,255,255,0.03);border-radius:8px;
+    border:1px solid rgba(255,255,255,0.05);
+  }
+  .score-dim-val { font-size:16px;font-weight:700;color:#fff; }
+  .score-dim-label { font-size:9px;color:#666;margin-top:2px; }
+
+  .error-item {
+    display:flex;align-items:center;gap:10px;
+    padding:10px 12px;border-radius:10px;margin-top:8px;
+    background:rgba(255,106,0,0.06);
+    border:1px solid rgba(255,106,0,0.12);
+  }
+  .error-dot { width:8px;height:8px;border-radius:50%;background:#ff6a00;box-shadow:0 0 8px rgba(255,106,0,0.5); }
+  .error-text { font-size:11px;color:#ccc; }
+
+  .chat-card { flex:1;display:flex;flex-direction:column;min-height:0; }
+  .chat-messages { flex:1;overflow-y:auto;padding:8px 0;display:flex;flex-direction:column;gap:8px; }
+  .chat-bubble-ai {
+    background:rgba(255,106,0,0.08);border:1px solid rgba(255,106,0,0.12);
+    border-radius:10px;padding:10px 12px;font-size:11px;color:#ddd;
+    max-width:90%;align-self:flex-start;
+  }
+  .chat-bubble-user {
+    background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);
+    border-radius:10px;padding:10px 12px;font-size:11px;color:#aaa;
+    max-width:90%;align-self:flex-end;
+  }
+  .chat-input-row {
+    display:flex;gap:8px;margin-top:8px;
+  }
+  .chat-input {
+    flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+    border-radius:10px;padding:10px 14px;font-size:11px;color:#fff;outline:none;
+  }
+  .chat-send {
+    background:linear-gradient(135deg,#ff6a00,#ee0979);
+    border:none;color:#fff;width:36px;height:36px;border-radius:10px;
+    cursor:pointer;font-size:14px;
+    box-shadow:0 0 12px rgba(255,106,0,0.3);
+  }
+</style>
+
+<div class="page">
+  <div class="main">
+    <div class="video-container">
+      <div class="video-placeholder">摄像头实时画面</div>
+      <div class="video-hud-top">
+        <div class="badge-live">LIVE</div>
+        <div class="badge-exercise">深蹲 Squat</div>
+      </div>
+      <div class="video-hud-bottom">
+        <div class="hud-stat">次数 <span>12</span></div>
+        <div class="hud-stat">时长 <span>3:42</span></div>
+        <div class="hud-stat">FPS <span>30</span></div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn-primary">开始训练</button>
+      <button class="btn-secondary">暂停</button>
+      <button class="btn-secondary">停止</button>
+      <div class="exercise-tabs">
+        <div class="tab-active">深蹲</div>
+        <div class="tab-inactive">俯卧撑</div>
+        <div class="tab-inactive">平板支撑</div>
+        <div class="tab-inactive">更多</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="glow-card">
+      <div class="card-label">Training Score</div>
+      <div class="score-big">92</div>
+      <div class="score-sub">当前动作质量评分</div>
+      <div class="score-breakdown">
+        <div class="score-dim"><div class="score-dim-val">38</div><div class="score-dim-label">角度 /40</div></div>
+        <div class="score-dim"><div class="score-dim-val">27</div><div class="score-dim-label">时序 /30</div></div>
+        <div class="score-dim"><div class="score-dim-val">27</div><div class="score-dim-label">对称 /30</div></div>
+      </div>
+    </div>
+
+    <div class="glow-card">
+      <div class="card-label">Real-time Correction</div>
+      <div class="error-item">
+        <div class="error-dot"></div>
+        <div class="error-text">膝盖微内扣 — 注意保持膝盖与脚尖方向一致</div>
+      </div>
+      <div class="error-item">
+        <div class="error-dot" style="background:#38ef7d;box-shadow:0 0 8px rgba(56,239,125,0.5);"></div>
+        <div class="error-text">下蹲深度良好，继续保持</div>
+      </div>
+    </div>
+
+    <div class="glow-card chat-card">
+      <div class="card-label">AI Coach</div>
+      <div class="chat-messages">
+        <div class="chat-bubble-ai">你好！我是你的AI健身教练。当前检测到你在做深蹲练习，整体动作质量不错，注意膝盖方向即可。</div>
+        <div class="chat-bubble-user">我的膝盖总是内扣怎么办？</div>
+        <div class="chat-bubble-ai">膝盖内扣通常是臀中肌力量不足导致的。建议在热身时加入弹力带侧走和蚌式开合，每组15次，可以有效激活臀中肌。</div>
+      </div>
+      <div class="chat-input-row">
+        <input class="chat-input" placeholder="问问AI教练...">
+        <button class="chat-send">→</button>
+      </div>
+    </div>
+  </div>
+</div>

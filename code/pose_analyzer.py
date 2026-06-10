@@ -699,8 +699,9 @@ class ErrorDetector:
         for detector in methods.get(exercise, []):
             error = detector(angles, keypoints, confidences, phase)
             if error:
-                self._error_counter[error.name] = self._error_counter.get(error.name, 0) + 1
-                if self._error_counter[error.name] >= self.CONSECUTIVE_FRAMES:
+                key = detector.__name__
+                self._error_counter[key] = self._error_counter.get(key, 0) + 1
+                if self._error_counter[key] >= self.CONSECUTIVE_FRAMES:
                     errors.append(error)
             else:
                 self._error_counter.pop(detector.__name__, None)
@@ -739,9 +740,7 @@ class ErrorDetector:
 
     # --- 错误 3: 深蹲弓背 ---
     def _detect_back_rounding(self, angles: JointAngles, kp, conf, phase) -> Optional[ErrorInfo]:
-        """躯干前倾角 > 45°."""
-        if phase != "低位":
-            return None
+        """躯干前倾角 > 45°。不限阶段 — 不良体态在任何阶段都应被检测。"""
         if angles.trunk_angle is not None and angles.trunk_angle > 45.0:
             return ErrorInfo(
                 name="深蹲弓背",
@@ -961,6 +960,11 @@ class PoseAnalyzer:
         self._scorer.update_angle(primary_val, self.phase)
         self._scorer.update_symmetry(angles)
         score = self._scorer.compute(temporal)
+
+        # 7. 无运动时限制得分 — 空站/静止不动不应得高分
+        #    进入"低位"(动态动作)或"保持"(静态动作)后正常评分
+        if self.count == 0 and self.phase not in ("低位", "保持"):
+            score.total = min(score.total, 50.0)
 
         return AnalysisResult(
             angles=angles,

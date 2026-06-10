@@ -217,5 +217,13 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .DS_Store
-.DS_Store
 /.claude
+.worktrees/
+
+# Project-specific
+data/api_config.json
+data/training_history/
+lora_fitness_adapter/
+hf_cache/
+yolo26n-pose.pt
+*.pt

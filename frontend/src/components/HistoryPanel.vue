@@ -1,0 +1,57 @@
+<template>
+  <div class="glow-card rounded-[14px] p-3.5 flex-1 flex flex-col min-h-0">
+    <div class="text-[10px] uppercase tracking-wider text-flame/70 font-semibold mb-2.5">训练历史</div>
+    <div v-if="loading" class="text-[10px] text-gray-600">加载中...</div>
+    <div v-else-if="sessions.length === 0" class="text-[10px] text-gray-600">暂无训练记录</div>
+    <div v-else class="flex-1 overflow-y-auto flex flex-col gap-1.5">
+      <div v-for="s in sessions" :key="s.session_id"
+           class="rounded-lg p-2.5 bg-white/[0.03] border border-white/[0.06]">
+        <div class="flex justify-between items-center mb-1">
+          <span class="text-[11px] text-gray-200 font-medium">{{ s.exercise }}</span>
+          <span class="text-[9px] text-gray-500">{{ formatDate(s.start_time) }}</span>
+        </div>
+        <div class="flex gap-3 text-[10px] text-gray-400">
+          <span>⏱ {{ fmtDuration(s.duration_seconds) }}</span>
+          <span>🔢 {{ s.total_reps }}次</span>
+          <span>⭐ {{ s.best_score }}分</span>
+          <span class="text-gray-500">均{{ s.avg_score }}分</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import type { SessionRecord } from '../types'
+
+const sessions = ref<SessionRecord[]>([])
+const loading = ref(true)
+
+async function loadHistory() {
+  loading.value = true
+  try {
+    const res = await fetch('http://localhost:8000/api/sessions')
+    const data = await res.json()
+    sessions.value = data.sessions || []
+  } catch { /* keep empty list */ }
+  loading.value = false
+}
+
+function formatDate(iso: string): string {
+  if (!iso) return ''
+  // "2026-06-02T14:30:00" → "06/02 14:30"
+  try {
+    const d = new Date(iso)
+    return `${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
+  } catch { return iso }
+}
+
+function fmtDuration(sec: number): string {
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+onMounted(loadHistory)
+</script>

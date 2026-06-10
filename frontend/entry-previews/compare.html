@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>入场页风格对比 · YOLO26 Fitness Agent</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { min-height: 100vh; font-family: -apple-system, "PingFang SC", sans-serif;
+    background: radial-gradient(ellipse at 50% 0%, #14141c, #0a0a0f 50%, #020203);
+    color: #fff; padding: 6vh 6vw; }
+  h1 { font-size: 2rem; font-weight: 800; letter-spacing: .02em;
+    background: linear-gradient(90deg, #fff, #ff6a00 60%, #ee0979);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  p.lead { color: rgba(255,255,255,.5); margin: .8rem 0 3rem; font-size: .95rem; letter-spacing: .05em; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+  a.card { display: block; text-decoration: none; color: #fff; border-radius: 18px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.02);
+    transition: transform .35s cubic-bezier(.16,1,.3,1), border-color .35s, box-shadow .35s; position: relative; }
+  a.card:hover { transform: translateY(-6px); border-color: rgba(255,106,0,.5);
+    box-shadow: 0 20px 60px -20px rgba(255,106,0,.4); }
+  .thumb { height: 160px; position: relative; overflow: hidden; }
+  .t1 { background: radial-gradient(circle at 30% 40%, rgba(255,106,0,.7), transparent 60%),
+                   radial-gradient(circle at 70% 60%, rgba(238,9,121,.6), transparent 60%), #0a0a0f; }
+  .t2 { background: #0a0a0f; }
+  .t2::after { content:''; position:absolute; inset:0;
+    background-image: radial-gradient(2px 2px at 20% 30%, #ff8a3d, transparent),
+      radial-gradient(2px 2px at 60% 50%, #ee0979, transparent),
+      radial-gradient(2px 2px at 80% 20%, #ff6a00, transparent),
+      radial-gradient(1px 1px at 40% 70%, #fff, transparent),
+      radial-gradient(2px 2px at 75% 80%, #ff8a3d, transparent); }
+  .t3 { background: #0a0a0f; }
+  .t3::after { content:''; position:absolute; left:-10%; right:-10%; top:50%; height:40%;
+    background: repeating-radial-gradient(circle, transparent, transparent 8px);
+    border-top: 2px solid rgba(255,106,0,.6); box-shadow: 0 0 30px rgba(255,106,0,.4);
+    border-radius: 50%; transform: scaleX(2); }
+  .t4 { background: linear-gradient(180deg, #060608 40%, #1a0a12);
+    background-image: linear-gradient(rgba(255,106,0,.3) 1px, transparent 1px), linear-gradient(90deg, rgba(238,9,121,.25) 1px, transparent 1px);
+    background-size: 100% 100%, 28px 28px; }
+  .t4::after { content:''; position:absolute; left:0; right:0; top:48%; height:2px;
+    background: linear-gradient(90deg, transparent, #ff6a00, #ee0979, transparent); box-shadow: 0 0 24px #ff6a00; }
+  .meta { padding: 1.2rem 1.4rem; }
+  .meta .name { font-size: 1.15rem; font-weight: 700; }
+  .meta .tag { font-size: .75rem; color: #ff8a3d; letter-spacing: .1em; margin-top:.2rem; }
+  .meta .desc { font-size: .82rem; color: rgba(255,255,255,.5); margin-top:.6rem; line-height: 1.6; }
+  .num { position:absolute; top:.8rem; right:1rem; font-size:.75rem; color:rgba(255,255,255,.4);
+    border:1px solid rgba(255,255,255,.15); border-radius:99px; padding:.1rem .6rem; z-index:2; }
+</style>
+</head>
+<body>
+  <h1>入场页风格对比</h1>
+  <p class="lead">四种「非常高级」的动态背景方案 · 统一大标题+副标语+明暗呼吸「点击进入」+ 光晕扩散淡出 · 点任意卡片预览,看完返回即可对比</p>
+
+  <div style="margin-bottom:1rem;font-size:.8rem;letter-spacing:.15em;color:#ff8a3d">★ 神经粒子 × 赛博地平线 融合版(已加鼠标光晕职照 + 编排式逐层入场)</div>
+  <div class="grid" style="margin-bottom:3rem">
+    <a class="card" href="fusionA.html"><span class="num">A</span>
+      <div class="thumb t4"></div>
+      <div class="meta"><div class="name">融合A · 全融合</div><div class="tag">GRID + HORIZON + PARTICLES</div>
+        <div class="desc">发光地平线 + 压暗透视网格打底,神经粒子浮在中层。三层景深,能量感最强。开场:地平线亮起→网格推近→粒子组网→标题浮现。</div></div></a>
+    <a class="card" href="fusionB.html"><span class="num">B</span>
+      <div class="thumb t2"></div>
+      <div class="meta"><div class="name">融合B · 粒子为主 + 地平线</div><div class="tag">PARTICLES + HORIZON</div>
+        <div class="desc">神经粒子主视觉,底部仅一条发光地平线做「落地」锚点,无网格。更干净、更高级、性能更好。我的首推。</div></div></a>
+  </div>
+
+  <div style="margin-bottom:1rem;font-size:.8rem;letter-spacing:.15em;color:rgba(255,255,255,.4)">原始四种风格(单一效果)</div>
+  <div class="grid">
+    <a class="card" href="1-aurora.html"><span class="num">01</span>
+      <div class="thumb t1"></div>
+      <div class="meta"><div class="name">流光极光</div><div class="tag">AMBIENT · CINEMA</div>
+        <div class="desc">深黑底上 3 个火焰橙/玫红巨型光晕缓慢漂浮呼吸,大模糊。电影级、安静、最高级。我的首推。</div></div></a>
+    <a class="card" href="2-neural.html"><span class="num">02</span>
+      <div class="thumb t2"></div>
+      <div class="meta"><div class="name">神经网络粒子</div><div class="tag">AI · NETWORK</div>
+        <div class="desc">粒子动态连线,鼠标靠近会推开节点。科技感强,呼应 AI Agent 身份。</div></div></a>
+    <a class="card" href="3-energywave.html"><span class="num">03</span>
+      <div class="thumb t3"></div>
+      <div class="meta"><div class="name">能量波</div><div class="tag">ENERGY · FLOW</div>
+        <div class="desc">橙红发光波带横贯流动,有运动力量感,呼应健身「燃烧」主题。</div></div></a>
+    <a class="card" href="4-cybergrid.html"><span class="num">04</span>
+      <div class="thumb t4"></div>
+      <div class="meta"><div class="name">赛博网格地平线</div><div class="tag">RETRO · FUTURE</div>
+        <div class="desc">透视网格地面 + 发光地平线向远方滚动,电竞赛博风,能量感最强。</div></div></a>
+  </div>
+</body>
+</html>

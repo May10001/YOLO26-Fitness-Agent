@@ -48,6 +48,10 @@ class GuidanceState:
         self.error_counts: dict[str, int] = {}
         self.guidance_history: list[GuidanceMessage] = []
         self.session_start: float = time.time()
+        self.last_proactive_time: float = 0.0
+        self.proactive_count: int = 0
+        self.last_milestone_count: int = 0
+        self.consecutive_error_frames: dict[str, int] = {}
 
     def update(self, result: AnalysisResult):
         """Update state from one analysis frame."""
@@ -59,14 +63,21 @@ class GuidanceState:
         if result.score.total > self.best_score:
             self.best_score = result.score.total
 
+        # Track milestone changes
+        if result.count > self.last_milestone_count:
+            self.last_milestone_count = result.count
+
         if not result.errors:
             self.consecutive_good_form += 1
             self.consecutive_bad_form = 0
+            self.consecutive_error_frames.clear()
         else:
             self.consecutive_bad_form += 1
             self.consecutive_good_form = 0
             for err in result.errors:
                 self.error_counts[err.name] = self.error_counts.get(err.name, 0) + 1
+                self.consecutive_error_frames[err.name] = \
+                    self.consecutive_error_frames.get(err.name, 0) + 1
 
 
 class ContextEngine:

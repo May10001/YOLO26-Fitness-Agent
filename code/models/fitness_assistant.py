@@ -19,16 +19,29 @@ FITNESS_SYSTEM_PROMPT = (
 
 
 class FitnessAssistant:
-    """Fitness-domain expert assistant using Qwen2.5-0.5B-Instruct + LoRA.
+    """Fitness-domain expert assistant using Qwen2.5-Instruct + LoRA.
 
     The LoRA adapter is fine-tuned on Chinese fitness Q&A data.
     If the adapter path is None, falls back to the base model with
     a fitness-specific system prompt.
+
+    Args:
+        lora_path: Path to a LoRA adapter directory (from fine_tuning.trainer).
+        model_size: Base model size: "0.5B", "1.5B", "3B", or "7B".
+                    Default "1.5B" is the recommended VRAM/capability balance.
     """
 
-    def __init__(self, lora_path: Optional[str] = None):
+    def __init__(
+        self,
+        lora_path: Optional[str] = None,
+        model_size: str = "1.5B",
+    ):
         self.lora_path = lora_path
-        self.model = BaseModel.get_instance(lora_path=lora_path)
+        self.model_size = model_size
+        self.model = BaseModel.get_instance(
+            lora_path=lora_path,
+            model_size=model_size,
+        )
 
     def chat(
         self,

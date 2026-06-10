@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --flame: #ff6a00;
+  --rose: #ee0979;
+  --success: #38ef7d;
+  --danger: #ff4d4d;
+  --bg: #0a0a0a;
+  --panel: #111111;
+}
+
+body {
+  background: var(--bg);
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+  margin: 0;
+  overflow: hidden;
+  height: 100vh;
+}
+
+.glow-card {
+  border-radius: 14px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(255,106,0,0.08), rgba(238,9,121,0.04));
+  border: 1px solid rgba(255,106,0,0.15);
+  box-shadow: 0 0 25px rgba(255,106,0,0.06), 0 0 50px rgba(238,9,121,0.03);
+}
+
+.glow-card-strong {
+  background: linear-gradient(135deg, rgba(255,106,0,0.1), rgba(238,9,121,0.05));
+  border: 1px solid rgba(255,106,0,0.2);
+  box-shadow: 0 0 30px rgba(255,106,0,0.08), 0 0 60px rgba(238,9,121,0.04);
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, var(--flame), var(--rose));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--flame), var(--rose));
+  border: none;
+  color: #fff;
+  border-radius: 10px;
+  font-weight: 700;
+  box-shadow: 0 0 20px rgba(255,106,0,0.3);
+  cursor: pointer;
+  transition: box-shadow 0.3s, transform 0.2s;
+}
+.btn-primary:hover {
+  box-shadow: 0 0 30px rgba(255,106,0,0.5);
+  transform: scale(1.02);
+}

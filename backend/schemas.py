@@ -24,3 +24,12 @@ class DetectionResult(BaseModel):
     hold_time: float | None = None
     errors: list[ErrorData] | None = None
     guidance: dict | None = None
+
+
+class ScoringConfig(BaseModel):
+    """可实时调整的评分参数. 所有字段可选 — 只更新传入的字段."""
+    target_low: float | None = None
+    target_high: float | None = None
+    symmetry_max_diff: float | None = None
+    angle_tolerance: float | None = None
+    smooth_alpha: float | None = None

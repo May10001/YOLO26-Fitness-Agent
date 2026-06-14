@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .routers.detect import router as detect_router
 from .routers.chat import router as chat_router
+from .routers.config import router as config_router
 
 app = FastAPI(title="YOLO26 Fitness API")
 
@@ -21,6 +22,7 @@ app.add_middleware(
 
 app.include_router(detect_router)
 app.include_router(chat_router)
+app.include_router(config_router)
 
 
 @app.get("/api/health")

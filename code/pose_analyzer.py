@@ -222,6 +222,82 @@ class ScoreResult:
 
 
 @dataclass
+class OverallRating:
+    """总体评分报告 — 在运动结束后或阶段性输出.
+
+    聚合整个运动过程的评分数据, 提供定性评级、趋势分析和改进建议.
+    """
+
+    # --- 评分等级常量 ---
+    GRADE_EXCELLENT = "优秀"
+    GRADE_GOOD = "良好"
+    GRADE_AVERAGE = "一般"
+    GRADE_NEEDS_IMPROVEMENT = "需改进"
+
+    GRADE_THRESHOLDS = [
+        (90, GRADE_EXCELLENT, "🌟", "动作标准，保持这个水准！"),
+        (75, GRADE_GOOD, "👍", "整体不错，注意细节打磨"),
+        (60, GRADE_AVERAGE, "📊", "基本完成，但需重点改进"),
+        (0,  GRADE_NEEDS_IMPROVEMENT, "💪", "建议放慢节奏，关注姿势准确度"),
+    ]
+
+    TREND_IMPROVING = "进步中"
+    TREND_STABLE = "稳定"
+    TREND_DECLINING = "下滑中"
+
+    # --- 字段 ---
+    total_score: float = 0.0            # 0-100 加权总分
+    grade: str = ""                     # 定性等级
+    grade_emoji: str = ""               # 等级对应的 emoji
+    grade_message: str = ""             # 等级对应的鼓励消息
+    dimension_breakdown: str = ""       # 中文分维度解释
+    trend: str = ""                     # 进步中/稳定/下滑中
+    highlight: str = ""                 # 亮点（最好的维度）
+    weakness: str = ""                  # 短板（最需要改进的维度）
+    suggestion: str = ""                # 综合改进建议
+    # 分维度均值
+    avg_angle_score: float = 0.0
+    avg_temporal_score: float = 0.0
+    avg_symmetry_score: float = 0.0
+    # 运动统计
+    total_reps: int = 0
+    total_duration_seconds: float = 0.0
+
+    @classmethod
+    def compute_grade(cls, total_score: float) -> tuple:
+        """根据总分返回 (grade, emoji, message)."""
+        for threshold, grade, emoji, msg in cls.GRADE_THRESHOLDS:
+            if total_score >= threshold:
+                return grade, emoji, msg
+        return cls.GRADE_NEEDS_IMPROVEMENT, "💪", "建议放慢节奏，关注姿势准确度"
+
+    @classmethod
+    def compute_trend(cls, score_history: list, window: int = 5) -> str:
+        """根据分数历史判断趋势.
+
+        Args:
+            score_history: 按时间排序的分数列表 (最近的在末尾).
+            window: 对比窗口大小.
+
+        Returns:
+            TREND_IMPROVING | TREND_STABLE | TREND_DECLINING
+        """
+        if len(score_history) < window * 2:
+            return cls.TREND_STABLE
+
+        early_avg = sum(score_history[:window]) / window
+        late_avg = sum(score_history[-window:]) / window
+        diff = late_avg - early_avg
+
+        if diff > 5:
+            return cls.TREND_IMPROVING
+        elif diff < -5:
+            return cls.TREND_DECLINING
+        else:
+            return cls.TREND_STABLE
+
+
+@dataclass
 class AnalysisResult:
     """每帧分析结果."""
     angles: JointAngles = field(default_factory=JointAngles)
@@ -231,6 +307,7 @@ class AnalysisResult:
     hold_time: float = 0.0              # 平板支撑等动作的保持时间
     errors: list = field(default_factory=list)
     score: ScoreResult = field(default_factory=ScoreResult)
+    overall: Optional[OverallRating] = None  # 运动结束后的总体评分报告
 
 
 # ============================================================================
@@ -406,7 +483,7 @@ EXERCISE_STANDARDS: dict[str, ExerciseStandard] = {
         count_trigger="high",
         trunk_max=35.0,
         symmetry_joints=("knee",),
-        symmetry_max_diff=12.0,
+        symmetry_max_diff=25.0,
     ),
     "俯卧撑": ExerciseStandard(
         name="俯卧撑",
@@ -418,7 +495,7 @@ EXERCISE_STANDARDS: dict[str, ExerciseStandard] = {
         count_trigger="high",
         trunk_max=20.0,
         symmetry_joints=("elbow", "shoulder"),
-        symmetry_max_diff=12.0,
+        symmetry_max_diff=25.0,
     ),
     "平板支撑": ExerciseStandard(
         name="平板支撑",
@@ -430,7 +507,7 @@ EXERCISE_STANDARDS: dict[str, ExerciseStandard] = {
         count_trigger="high",       # 不用计数, 计时
         trunk_max=12.0,
         symmetry_joints=("elbow", "knee"),
-        symmetry_max_diff=10.0,
+        symmetry_max_diff=25.0,
         hold_threshold=90.0,
     ),
     "卷腹": ExerciseStandard(
@@ -443,7 +520,7 @@ EXERCISE_STANDARDS: dict[str, ExerciseStandard] = {
         count_trigger="high",
         trunk_max=55.0,
         symmetry_joints=("shoulder",),
-        symmetry_max_diff=15.0,
+        symmetry_max_diff=25.0,
     ),
     "开合跳": ExerciseStandard(
         name="开合跳",
@@ -455,7 +532,7 @@ EXERCISE_STANDARDS: dict[str, ExerciseStandard] = {
         count_trigger="high",
         trunk_max=25.0,
         symmetry_joints=("elbow", "knee"),
-        symmetry_max_diff=20.0,
+        symmetry_max_diff=25.0,
     ),
     "引体向上": ExerciseStandard(
         name="引体向上",
@@ -467,7 +544,7 @@ EXERCISE_STANDARDS: dict[str, ExerciseStandard] = {
         count_trigger="high",
         trunk_max=15.0,
         symmetry_joints=("elbow", "shoulder"),
-        symmetry_max_diff=10.0,
+        symmetry_max_diff=25.0,
     ),
     "臀桥": ExerciseStandard(
         name="臀桥",
@@ -479,7 +556,7 @@ EXERCISE_STANDARDS: dict[str, ExerciseStandard] = {
         count_trigger="high",
         trunk_max=20.0,
         symmetry_joints=("knee", "hip"),
-        symmetry_max_diff=12.0,
+        symmetry_max_diff=25.0,
     ),
     "高抬腿": ExerciseStandard(
         name="高抬腿",
@@ -491,7 +568,7 @@ EXERCISE_STANDARDS: dict[str, ExerciseStandard] = {
         count_trigger="high",
         trunk_max=15.0,
         symmetry_joints=("knee", "hip"),
-        symmetry_max_diff=15.0,
+        symmetry_max_diff=25.0,
     ),
     "肩推": ExerciseStandard(
         name="肩推",
@@ -503,7 +580,7 @@ EXERCISE_STANDARDS: dict[str, ExerciseStandard] = {
         count_trigger="high",
         trunk_max=15.0,
         symmetry_joints=("elbow", "shoulder"),
-        symmetry_max_diff=12.0,
+        symmetry_max_diff=25.0,
     ),
     "侧平举": ExerciseStandard(
         name="侧平举",
@@ -515,7 +592,7 @@ EXERCISE_STANDARDS: dict[str, ExerciseStandard] = {
         count_trigger="high",
         trunk_max=12.0,
         symmetry_joints=("elbow", "shoulder"),
-        symmetry_max_diff=12.0,
+        symmetry_max_diff=25.0,
     ),
 }
 
@@ -539,8 +616,10 @@ class MovementScorer:
         self.exercise_name = exercise_name
         self.standard = EXERCISE_STANDARDS.get(exercise_name)
         self.smooth_alpha = smooth_alpha  # EMA 平滑系数
+        self.angle_tolerance = 15.0        # 角度高斯容差 (°), 可外部调参
         self._angle_samples: list = []       # 原始角度值
-        self._smoothed_angles: list = []     # EMA 平滑后角度值
+        self._smoothed_angles: list = []     # EMA 平滑后角度值 (保留兼容)
+        self._angle_records: list = []       # [(smoothed_angle, target), ...] 每帧存自己的目标
         self._symmetry_diffs: dict[str, list] = {}  # 每帧各关节左右差值
         self._current_phase: str = "高位"     # 从 PoseAnalyzer 传入的实际相位
 
@@ -548,6 +627,12 @@ class MovementScorer:
         self._smooth_angle_score: Optional[float] = None
         self._smooth_temporal_score: Optional[float] = None
         self._smooth_symmetry_score: Optional[float] = None
+
+        # 分数历史 (用于趋势分析和总体评分)
+        self._score_history: list[float] = []     # 每帧 total 分数
+        self._angle_score_history: list[float] = []
+        self._temporal_score_history: list[float] = []
+        self._symmetry_score_history: list[float] = []
 
     def update_angle(self, angle_value: Optional[float], phase: str):
         """记录一帧的角度（应用 EMA 平滑，存储相位用于目标选择）."""
@@ -558,6 +643,45 @@ class MovementScorer:
             prev = self._smoothed_angles[-1] if self._smoothed_angles else float(angle_value)
             smoothed = self.smooth_alpha * float(angle_value) + (1 - self.smooth_alpha) * prev
             self._smoothed_angles.append(smoothed)
+
+            # 存 (角度, 动态目标) 对 — 过渡期用实际角度作为目标避免误罚
+            if self.standard:
+                target = self._dynamic_target(phase, smoothed)
+                self._angle_records.append((smoothed, target))
+                # 只保留最近 60 帧 (约 2 秒)
+                if len(self._angle_records) > 60:
+                    self._angle_records.pop(0)
+
+    def _dynamic_target(self, phase: str, smoothed_angle: float) -> float:
+        """计算动态目标角度 — 过渡期用实际角度，避免移动中被误罚.
+
+        当角度处于两个相位的有效范围之间 (过渡区), 直接用当前角度作为目标,
+        意味着"正在移动中"不扣分. 只有在目标相位内才用标准目标衡量精度.
+        """
+        if not self.standard:
+            return smoothed_angle
+
+        low_min, low_max = self.standard.low_range
+        high_min, high_max = self.standard.high_range
+
+        if phase in ("低位", "保持"):
+            # 在低位有效范围内 → 合标, 不罚
+            if low_min <= smoothed_angle <= low_max:
+                return smoothed_angle
+            # 在过渡区 → 移动中, 不罚
+            if low_max < smoothed_angle < high_min:
+                return smoothed_angle
+            # 超出范围 (太高或太低) → 用目标角度惩罚
+            return self.standard.target_low
+        else:
+            # 在高位有效范围内 → 合标, 不罚
+            if high_min <= smoothed_angle <= high_max:
+                return smoothed_angle
+            # 在过渡区 → 移动中, 不罚
+            if low_max < smoothed_angle < high_min:
+                return smoothed_angle
+            # 超出范围 → 用目标角度惩罚
+            return self.standard.target_high
 
     def update_symmetry(self, angles: JointAngles):
         """记录一帧的对称性数据."""
@@ -588,8 +712,16 @@ class MovementScorer:
             self._smooth_symmetry_score = alpha * symmetry_score + (1 - alpha) * self._smooth_symmetry_score
 
         total = self._smooth_angle_score + self._smooth_temporal_score + self._smooth_symmetry_score
+        total = round(min(total, 100.0), 1)
+
+        # 记录分数历史 (用于总体评分和趋势分析)
+        self._score_history.append(total)
+        self._angle_score_history.append(round(self._smooth_angle_score, 1))
+        self._temporal_score_history.append(round(self._smooth_temporal_score, 1))
+        self._symmetry_score_history.append(round(self._smooth_symmetry_score, 1))
+
         return ScoreResult(
-            total=round(min(total, 100.0), 1),
+            total=total,
             angle_score=round(self._smooth_angle_score, 1),
             temporal_score=round(self._smooth_temporal_score, 1),
             symmetry_score=round(self._smooth_symmetry_score, 1),
@@ -599,23 +731,19 @@ class MovementScorer:
         """关节角度得分 (0-40).
 
         高斯衰减: score = 40 * exp(-(mean_dev/tolerance)²)
-        使用 PoseAnalyzer 传入的实际相位选择目标角度，EMA 平滑抗噪声.
+        使用每帧记录时对应的目标角度计算偏差，避免相位切换时
+        旧帧角度被新目标误判（如站立的170°被下蹲目标90°判为偏差80°）.
         """
-        if not self.standard or not self._smoothed_angles:
+        if not self.standard or not self._angle_records:
             return 0.0
 
-        # 根据实际相位选择目标角度
-        if self._current_phase in ("低位", "保持"):
-            target = self.standard.target_low
-        else:
-            target = self.standard.target_high
+        tolerance = self.angle_tolerance
 
-        tolerance = 10.0  # 容差 (度)
+        # 取最近 30 条 (angle, target) 记录 (~1 秒)
+        recent = self._angle_records[-30:]
 
-        # 取最近平滑样本 (~1秒)
-        recent = self._smoothed_angles[-30:]
-
-        deviations = [abs(a - target) for a in recent]
+        # 每条记录用自己存入时的 target 算偏差
+        deviations = [abs(angle - target) for angle, target in recent]
         mean_dev = float(np.mean(deviations))
 
         return 40.0 * math.exp(-((mean_dev / tolerance) ** 2))
@@ -655,13 +783,130 @@ class MovementScorer:
 
         return 30.0 * float(np.mean(scores))
 
+    def get_overall_rating(self, total_reps: int = 0,
+                           duration_seconds: float = 0.0) -> OverallRating:
+        """聚合整个运动过程的评分数据, 生成总体评分报告.
+
+        Args:
+            total_reps: 总重复次数.
+            duration_seconds: 运动总时长 (秒).
+
+        Returns:
+            OverallRating: 包含定性评级、趋势分析和改进建议的总体报告.
+        """
+        if not self._score_history:
+            # 无数据时返回默认报告
+            grade, emoji, msg = OverallRating.compute_grade(0.0)
+            return OverallRating(
+                total_score=0.0,
+                grade=grade, grade_emoji=emoji, grade_message=msg,
+                dimension_breakdown="暂无评分数据",
+                trend=OverallRating.TREND_STABLE,
+                highlight="无", weakness="无",
+                suggestion="开始运动以获取评分反馈",
+                total_reps=total_reps,
+                total_duration_seconds=duration_seconds,
+            )
+
+        # --- 1. 加权总分 (取最近 30 帧的均值, 反映当前状态) ---
+        recent = self._score_history[-30:]
+        total_score = round(float(np.mean(recent)), 1)
+
+        # --- 2. 定性等级 ---
+        grade, emoji, msg = OverallRating.compute_grade(total_score)
+
+        # --- 3. 分维度均值 (归一化到百分制便于比较) ---
+        avg_angle = round(float(np.mean(self._angle_score_history[-30:])), 1)
+        avg_temporal = round(float(np.mean(self._temporal_score_history[-30:])), 1)
+        avg_symmetry = round(float(np.mean(self._symmetry_score_history[-30:])), 1)
+
+        # 归一化到 0-100
+        angle_pct = avg_angle / 40.0 * 100
+        temporal_pct = avg_temporal / 30.0 * 100
+        symmetry_pct = avg_symmetry / 30.0 * 100
+
+        dims = [
+            ("关节角度", angle_pct, avg_angle, 40.0),
+            ("时序节奏", temporal_pct, avg_temporal, 30.0),
+            ("左右对称", symmetry_pct, avg_symmetry, 30.0),
+        ]
+        dims.sort(key=lambda x: x[1], reverse=True)
+
+        # --- 4. 亮点 & 短板 & 分维度解释 ---
+        best_name, best_pct, best_raw, best_max = dims[0]
+        worst_name, worst_pct, worst_raw, worst_max = dims[2]
+
+        highlight = f"{best_name} ({best_raw:.0f}/{best_max:.0f})"
+        weakness = f"{worst_name} ({worst_raw:.0f}/{worst_max:.0f})"
+
+        breakdown_parts = []
+        for name, pct, raw, max_val in dims:
+            if pct >= 85:
+                level = "优秀"
+            elif pct >= 70:
+                level = "良好"
+            elif pct >= 50:
+                level = "一般"
+            else:
+                level = "需改进"
+            breakdown_parts.append(f"{name}: {raw:.0f}/{max_val:.0f}（{level}）")
+        dimension_breakdown = "；".join(breakdown_parts)
+
+        # --- 5. 趋势 ---
+        trend = OverallRating.compute_trend(self._score_history)
+
+        # --- 6. 综合改进建议 ---
+        suggestion = self._generate_suggestion(worst_name, total_score, grade)
+
+        return OverallRating(
+            total_score=total_score,
+            grade=grade, grade_emoji=emoji, grade_message=msg,
+            dimension_breakdown=dimension_breakdown,
+            trend=trend,
+            highlight=highlight, weakness=weakness,
+            suggestion=suggestion,
+            avg_angle_score=avg_angle,
+            avg_temporal_score=avg_temporal,
+            avg_symmetry_score=avg_symmetry,
+            total_reps=total_reps,
+            total_duration_seconds=round(duration_seconds, 1),
+        )
+
+    def _generate_suggestion(self, worst_dim: str, total_score: float,
+                             grade: str) -> str:
+        """根据短板维度和总分生成改进建议."""
+        dim_suggestions = {
+            "关节角度": "注意控制动作幅度，确保每次动作都做到位。"
+                       "深蹲时大腿与地面平行，俯卧撑时胸部贴近地面。",
+            "时序节奏": "尝试保持均匀的动作节奏，建议下放2秒、发力1秒。"
+                       "避免借助惯性完成动作。",
+            "左右对称": "注意左右两侧均衡发力，可以对着镜子检查身体是否歪斜。"
+                       "弱侧可以先做单侧训练来弥补差距。",
+        }
+
+        base = dim_suggestions.get(worst_dim, "建议关注动作质量，持续练习。")
+
+        if grade == OverallRating.GRADE_EXCELLENT:
+            return f"表现优异！继续保持当前水准。{base}"
+        elif grade == OverallRating.GRADE_GOOD:
+            return f"整体不错。{base}"
+        elif grade == OverallRating.GRADE_AVERAGE:
+            return f"还有提升空间，建议重点改善{worst_dim}。{base}"
+        else:
+            return f"建议先放慢节奏，专注动作质量而非数量。{base}"
+
     def reset(self):
         self._angle_samples.clear()
         self._smoothed_angles.clear()
+        self._angle_records.clear()
         self._symmetry_diffs.clear()
         self._smooth_angle_score = None
         self._smooth_temporal_score = None
         self._smooth_symmetry_score = None
+        self._score_history.clear()
+        self._angle_score_history.clear()
+        self._temporal_score_history.clear()
+        self._symmetry_score_history.clear()
         self._current_phase = "高位"
 
 
@@ -740,8 +985,8 @@ class ErrorDetector:
 
     # --- 错误 3: 深蹲弓背 ---
     def _detect_back_rounding(self, angles: JointAngles, kp, conf, phase) -> Optional[ErrorInfo]:
-        """躯干前倾角 > 45°。不限阶段 — 不良体态在任何阶段都应被检测。"""
-        if angles.trunk_angle is not None and angles.trunk_angle > 45.0:
+        """躯干前倾 > 45°（即躯干角 < 135°）。不限阶段 — 不良体态在任何阶段都应被检测。"""
+        if angles.trunk_angle is not None and angles.trunk_angle < 135.0:
             return ErrorInfo(
                 name="深蹲弓背",
                 severity=2,
@@ -838,7 +1083,7 @@ class ErrorDetector:
         """侧平举时躯干倾角 > 15° 表示身体借力晃动."""
         if phase != "高位":
             return None
-        if angles.trunk_angle is not None and angles.trunk_angle > 15.0:
+        if angles.trunk_angle is not None and angles.trunk_angle < 165.0:
             return ErrorInfo(
                 name="身体晃动借力",
                 severity=1,
@@ -850,7 +1095,7 @@ class ErrorDetector:
     # --- 辅助错误: 引体向上摆动 ---
     def _detect_pullup_swing(self, angles: JointAngles, kp, conf, phase) -> Optional[ErrorInfo]:
         """引体向上时躯干倾角 > 12° 表示身体摆动借力."""
-        if angles.trunk_angle is not None and angles.trunk_angle > 12.0:
+        if angles.trunk_angle is not None and angles.trunk_angle < 168.0:
             return ErrorInfo(
                 name="身体摆动",
                 severity=2,
@@ -880,7 +1125,7 @@ class ErrorDetector:
     # --- 辅助错误: 高抬腿身体后仰 ---
     def _detect_high_knee_lean(self, angles: JointAngles, kp, conf, phase) -> Optional[ErrorInfo]:
         """高抬腿时躯干倾角 > 18° 表示身体后仰."""
-        if angles.trunk_angle is not None and angles.trunk_angle > 18.0:
+        if angles.trunk_angle is not None and angles.trunk_angle < 162.0:
             return ErrorInfo(
                 name="身体后仰",
                 severity=2,
@@ -892,7 +1137,7 @@ class ErrorDetector:
     # --- 辅助错误: 肩推弓背 ---
     def _detect_shoulder_press_arch(self, angles: JointAngles, kp, conf, phase) -> Optional[ErrorInfo]:
         """肩推时躯干倾角 > 15° 表示过度弓背."""
-        if angles.trunk_angle is not None and angles.trunk_angle > 15.0:
+        if angles.trunk_angle is not None and angles.trunk_angle < 165.0:
             return ErrorInfo(
                 name="肩推弓背",
                 severity=2,
@@ -937,6 +1182,31 @@ class PoseAnalyzer:
         self._hold_start: Optional[float] = None
         self.hold_time = 0.0
 
+        # 运动时长追踪
+        self._session_start_time: Optional[float] = None  # 首次进入运动相位的时间
+        self._session_active: bool = False
+
+    def apply_tuning(self, **kwargs):
+        """运行时调参 — 同步更新 PoseAnalyzer.standard 和 MovementScorer.standard.
+
+        由于两个类各自从 EXERCISE_STANDARDS 查表得到独立的 ExerciseStandard 对象,
+        调参时必须同时更新两者, 确保相位判断和评分使用同一套参数.
+
+        可调参数:
+            target_low, target_high, symmetry_max_diff, trunk_max,
+            angle_tolerance, smooth_alpha
+        """
+        std = self.standard
+        scorer = self._scorer
+
+        for key, value in kwargs.items():
+            if value is None:
+                continue
+            if hasattr(std, key):
+                setattr(std, key, value)
+            if hasattr(scorer, key):
+                setattr(scorer, key, value)
+
     def analyze_frame(self, keypoints: np.ndarray,
                       confidences: Optional[np.ndarray] = None) -> AnalysisResult:
         """处理一帧关键点数据, 返回完整分析结果."""
@@ -966,6 +1236,14 @@ class PoseAnalyzer:
         if self.count == 0 and self.phase not in ("低位", "保持"):
             score.total = min(score.total, 50.0)
 
+        # 8. 在 rep 里程碑时自动生成总体评分报告
+        overall = None
+        if self._session_active and self.count > 0 and self.count % 5 == 0:
+            prev_count = getattr(self, '_last_milestone_count', 0)
+            if self.count != prev_count:
+                overall = self.get_overall_rating()
+                self._last_milestone_count = self.count
+
         return AnalysisResult(
             angles=angles,
             temporal=temporal,
@@ -974,6 +1252,7 @@ class PoseAnalyzer:
             hold_time=self.hold_time,
             errors=errors,
             score=score,
+            overall=overall,
         )
 
     def _update_phase_and_count(self, angles: JointAngles,
@@ -992,6 +1271,7 @@ class PoseAnalyzer:
                 if self._hold_start is None:
                     self._hold_start = time.time()
                     self.phase = "保持"
+                    self._mark_session_start()
                 else:
                     self.hold_time = time.time() - self._hold_start
                     self.phase = "保持"
@@ -1001,6 +1281,7 @@ class PoseAnalyzer:
             return
 
         # 动态动作计数
+        prev_phase = self.phase
         if std.count_trigger == "high":
             if primary_val <= low_max:
                 self.phase = "低位"
@@ -1018,8 +1299,37 @@ class PoseAnalyzer:
             elif primary_val <= low_max and self.phase == "等待":
                 self.phase = "低位"
 
+        # 追踪运动开始时间
+        if prev_phase == "等待" and self.phase != "等待":
+            self._mark_session_start()
+
+    def _mark_session_start(self):
+        """标记运动会话开始时间."""
+        if self._session_start_time is None:
+            self._session_start_time = time.time()
+            self._session_active = True
+
     def get_score(self) -> ScoreResult:
         return self._scorer.compute(self._temporal_extractor.update(None, self.phase))
+
+    def get_overall_rating(self) -> OverallRating:
+        """获取整个运动过程的总体评分报告.
+
+        聚合从运动开始到当前的所有评分数据, 生成包含定性评级、
+        趋势分析和改进建议的总体报告.
+
+        可在运动进行中调用（获取阶段性评级），也可在运动结束后调用。
+
+        Returns:
+            OverallRating: 总体评分报告.
+        """
+        duration = 0.0
+        if self._session_start_time is not None:
+            duration = time.time() - self._session_start_time
+        return self._scorer.get_overall_rating(
+            total_reps=self.count,
+            duration_seconds=duration,
+        )
 
     def get_errors(self) -> list[ErrorInfo]:
         """获取当前活跃错误（简化版，不传关键点则返回空）."""
@@ -1030,6 +1340,8 @@ class PoseAnalyzer:
         self.phase = "等待"
         self._hold_start = None
         self.hold_time = 0.0
+        self._session_start_time = None
+        self._session_active = False
         self._temporal_extractor.reset()
         self._scorer.reset()
         self._error_detector.reset()
@@ -1122,6 +1434,19 @@ def _self_test():
     print(f"  对称得分: {score.symmetry_score:.1f}/30")
     assert score.total > 70, f"完美动作得分应 >70, 实际 {score.total:.1f}"
     print("  [PASS] 评分验证通过")
+
+    # --- 测试 4b: 总体评分报告 ---
+    print("\n[4b] 总体评分报告")
+    overall = scorer.get_overall_rating(total_reps=10, duration_seconds=30.0)
+    print(f"  综合评分: {overall.total_score:.1f}/100")
+    print(f"  等级: {overall.grade_emoji} {overall.grade}")
+    print(f"  趋势: {overall.trend}")
+    print(f"  亮点: {overall.highlight}")
+    print(f"  短板: {overall.weakness}")
+    print(f"  分维度: {overall.dimension_breakdown}")
+    print(f"  建议: {overall.suggestion}")
+    assert overall.grade in ("优秀", "良好"), f"完美动作等级应为优秀/良好, 实际 {overall.grade}"
+    print("  [PASS] 总体评分报告验证通过")
 
     # --- 测试 5: 错误检测 ---
     print("\n[5] 错误检测")

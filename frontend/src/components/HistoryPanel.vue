@@ -24,6 +24,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import type { SessionRecord } from '../types'
+import { config } from '../config'
 
 const sessions = ref<SessionRecord[]>([])
 const loading = ref(true)
@@ -31,7 +32,7 @@ const loading = ref(true)
 async function loadHistory() {
   loading.value = true
   try {
-    const res = await fetch('http://localhost:8002/api/sessions')
+    const res = await fetch(config.endpoints.sessions)
     const data = await res.json()
     sessions.value = data.sessions || []
   } catch { /* keep empty list */ }

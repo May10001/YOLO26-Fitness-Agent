@@ -77,6 +77,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import type { ScoreData, PoseContext } from './types'
+import { config } from './config'
 import { useCamera } from './composables/useCamera'
 import { useWebSocket } from './composables/useWebSocket'
 import { useTrainingState } from './composables/useTrainingState'
@@ -188,7 +189,7 @@ watch(() => ws.lastResult.value?.score?.total, (newTotal) => {
 // Fetch authoritative exercise list from backend
 async function fetchExercises() {
   try {
-    const res = await fetch('http://localhost:8002/api/exercises')
+    const res = await fetch(config.endpoints.exercises)
     if (!res.ok) return
     const data = await res.json()
     if (data.exercises && Array.isArray(data.exercises) && data.exercises.length > 0) {
@@ -211,7 +212,7 @@ function resetSessionStats() {
 // ---- Session lifecycle (for training history) ----
 async function beginSession() {
   try {
-    const res = await fetch('http://localhost:8002/api/session/start', {
+    const res = await fetch(config.endpoints.sessionStart, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ exercise: currentExercise.value }),
@@ -226,7 +227,7 @@ async function endSession() {
   if (!sessionId.value) return
   try {
     const duration = (Date.now() - sessionStartTime.value) / 1000
-    await fetch('http://localhost:8002/api/session/stop', {
+    await fetch(config.endpoints.sessionStop, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

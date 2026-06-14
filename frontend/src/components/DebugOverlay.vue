@@ -164,7 +164,8 @@
 import { ref, watch, reactive } from 'vue'
 import type { DebugData, ScoreData, ScoringConfig } from '../types'
 
-const API_BASE = 'http://localhost:8002'
+import { config } from '../config'
+const API_BASE = config.apiBase
 
 const props = defineProps<{
   debug: DebugData | null

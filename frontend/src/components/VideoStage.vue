@@ -8,6 +8,12 @@
       :video-width="640"
       :video-height="480"
     />
+    <DebugOverlay
+      v-if="showDebug && result?.debug"
+      :debug="result.debug"
+      :score="score"
+      :phase="result?.phase || ''"
+    />
     <GaugeBar direction="left" :value="score.angle" :max="40" />
     <GaugeBar direction="right" :value="score.symmetry" :max="30" />
     <GaugeBar direction="bottom" :value="score.temporal" :max="30" />
@@ -66,9 +72,10 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { DetectionResult, ScoreData, GuidanceData } from '../types'
+import type { DetectionResult, ScoreData, GuidanceData, DebugData } from '../types'
 import GaugeBar from './GaugeBar.vue'
 import SkeletonOverlay from './SkeletonOverlay.vue'
+import DebugOverlay from './DebugOverlay.vue'
 
 const props = defineProps<{
   result: DetectionResult | null
@@ -78,6 +85,7 @@ const props = defineProps<{
   formattedTime: string
   fps: number
   stream: MediaStream | null
+  showDebug?: boolean
 }>()
 
 const videoEl = ref<HTMLVideoElement | null>(null)

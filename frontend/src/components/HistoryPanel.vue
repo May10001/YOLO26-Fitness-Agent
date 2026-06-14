@@ -31,7 +31,7 @@ const loading = ref(true)
 async function loadHistory() {
   loading.value = true
   try {
-    const res = await fetch('http://localhost:8000/api/sessions')
+    const res = await fetch('http://localhost:8002/api/sessions')
     const data = await res.json()
     sessions.value = data.sessions || []
   } catch { /* keep empty list */ }

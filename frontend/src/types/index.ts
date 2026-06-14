@@ -1,3 +1,24 @@
+export interface ScoringConfig {
+  target_low: number
+  target_high: number
+  symmetry_max_diff: number
+  angle_tolerance: number
+  smooth_alpha: number
+}
+
+export interface DebugData {
+  primary_angle: number | null
+  knee_left: number | null
+  knee_right: number | null
+  target_angle: number | null
+  deviation: number | null
+  knee_diff: number | null
+  symmetry_max_diff: number | null
+  temporal_rhythm_cv: number | null
+  temporal_smoothness: number | null
+  angular_velocity: number | null
+}
+
 export interface ScoreData {
   total: number
   angle: number
@@ -27,6 +48,7 @@ export interface DetectionResult {
   hold_time?: number
   errors?: ErrorData[]
   guidance?: GuidanceData
+  debug?: DebugData
   heatmap?: HeatmapData
 }
 

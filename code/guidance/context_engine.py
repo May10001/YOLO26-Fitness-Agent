@@ -98,6 +98,9 @@ class ContextEngine:
         GuidanceType.SAFETY: 2.0,
     }
 
+    # 总分高于此阈值时，禁用所有 safety/form_correction/performance 提示
+    SUPPRESS_SCORE_THRESHOLD = 80
+
     MOTIVATION_MILESTONES = {5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100}
 
     MILESTONE_MESSAGES = {
@@ -164,6 +167,8 @@ class ContextEngine:
 
     def _check_safety(self, result: AnalysisResult) -> Optional[GuidanceMessage]:
         """Safety warnings for dangerous form (priority 4)."""
+        if result.score.total > self.SUPPRESS_SCORE_THRESHOLD:
+            return None
         for err in result.errors:
             if err.severity >= 2:
                 return GuidanceMessage(
@@ -181,6 +186,8 @@ class ContextEngine:
 
     def _check_form_correction(self, result: AnalysisResult) -> Optional[GuidanceMessage]:
         """Form correction from detected errors (priority 3)."""
+        if result.score.total > self.SUPPRESS_SCORE_THRESHOLD:
+            return None
         if not result.errors:
             return None
         worst = max(result.errors, key=lambda e: e.severity)
@@ -192,8 +199,27 @@ class ContextEngine:
 
     def _check_performance(self, result: AnalysisResult) -> Optional[GuidanceMessage]:
         """Performance feedback based on score (priority 2)."""
+        if result.score.total > self.SUPPRESS_SCORE_THRESHOLD:
+            return None
         if result.phase == "等待" or result.count == 0:
             return None
+
+        # 如果有总体评分报告, 使用更丰富的反馈
+        if result.overall is not None:
+            overall = result.overall
+            if overall.grade == "优秀":
+                return GuidanceMessage(
+                    type=GuidanceType.PERFORMANCE,
+                    priority=2,
+                    text=f"🌟 {overall.grade_emoji} 总体评分 {overall.total_score:.0f} 分 — {overall.grade_message}",
+                )
+            elif overall.grade == "需改进":
+                return GuidanceMessage(
+                    type=GuidanceType.PERFORMANCE,
+                    priority=2,
+                    text=f"📊 {overall.grade_emoji} 总体评分 {overall.total_score:.0f} 分。{overall.suggestion}",
+                )
+
         if result.score.total < 30:
             return GuidanceMessage(
                 type=GuidanceType.PERFORMANCE,
@@ -261,6 +287,9 @@ class ContextEngine:
         Combines the current AnalysisResult with historical stats from GuidanceState
         to produce a complete snapshot the model can reason about.
 
+        When result.overall is available (at rep milestones or end of session),
+        includes a comprehensive overall rating with grade, trend, and suggestions.
+
         Returns a dict matching the coach context JSON schema.
         """
         # --- exercise ---
@@ -280,6 +309,24 @@ class ContextEngine:
             "temporal": result.score.temporal_score,
             "symmetry": result.score.symmetry_score,
         }
+
+        # --- overall_rating (when available) ---
+        overall_rating = None
+        if result.overall is not None:
+            overall_rating = {
+                "total_score": result.overall.total_score,
+                "grade": result.overall.grade,
+                "grade_emoji": result.overall.grade_emoji,
+                "grade_message": result.overall.grade_message,
+                "dimension_breakdown": result.overall.dimension_breakdown,
+                "trend": result.overall.trend,
+                "highlight": result.overall.highlight,
+                "weakness": result.overall.weakness,
+                "suggestion": result.overall.suggestion,
+                "avg_angle_score": result.overall.avg_angle_score,
+                "avg_temporal_score": result.overall.avg_temporal_score,
+                "avg_symmetry_score": result.overall.avg_symmetry_score,
+            }
 
         # --- joint_angles ---
         a = result.angles
@@ -317,7 +364,7 @@ class ContextEngine:
             "error_ranking": error_ranking,
         }
 
-        return {
+        result_dict = {
             "exercise": exercise,
             "rep_count": rep_count,
             "phase": phase,
@@ -326,6 +373,9 @@ class ContextEngine:
             "errors": errors,
             "stats": stats,
         }
+        if overall_rating is not None:
+            result_dict["overall_rating"] = overall_rating
+        return result_dict
 
     def reset(self):
         self.state = GuidanceState()

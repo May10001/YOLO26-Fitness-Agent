@@ -245,6 +245,7 @@ cd frontend && npm install && npm run dev
 | `HistoryPanel.vue` | ★ 训练历史列表（从 `/api/session` 拉取） |
 | `PlanPanel.vue` | ★ 用户画像表单 + 周度训练计划生成 |
 | `ControlBar.vue` | 动作选择 + 开始/暂停/重置 |
+| `DebugOverlay.vue` | 🐛 开发者调试面板：原始角度/评分明细/角度波形/实时调参滑块（D 键切换） |
 | `RingGauge.vue` / `ParticleBackground.vue` | 环形进度 / 粒子背景 |
 
 **Composables**：`useCamera.ts`（摄像头抽帧）、`useWebSocket.ts`（连接管理 + 重连）、`useTrainingState.ts`（idle/running/paused 状态机 + 计时）。
@@ -257,6 +258,84 @@ cd frontend && npm install && npm run dev
   - 设计稿存档：`frontend/entry-previews/`（4 种原始风格 + 2 种融合版 + `compare.html` 对比页），最终采用「融合A + 吸附高亮」。
 - **新增 `HistoryPanel.vue` / `PlanPanel.vue` / `JointHeatmap.vue`** — 右栏 Tab 切换（AI教练 / 历史 / 计划），关节热力图独立展示。
 - **修改** `App.vue`（入场页接入 + 会话生命周期 + 三维度评分聚合）、`useWebSocket.ts`（新增 guidance / coach 消息）、`types/index.ts`（`HeatmapData` / `PoseContext` 等类型）、`AiCoach.vue` / `ScorePanel.vue` / `CorrectionPanel.vue` / `VideoStage.vue`。
+
+### 本轮后端修改记录（2025-06-14）
+
+> Debug 调参面板、对称性调参、躯干角 Bug 修复、高分静默机制。
+
+#### 0. Debug 调参面板（前端 + 后端）
+
+**前端 `DebugOverlay.vue`**（新增）— 训练界面左下角的开发者调试面板，按 **D 键** 或点击 **🐛 DEBUG** 按钮切换显隐。包含四大模块：
+
+| 模块 | 位置 | 内容 |
+|------|------|------|
+| 📐 原始角度 | 左上 | 左膝/右膝角度、目标角度、当前阶段、角度偏差、左右膝差异 |
+| 📊 评分明细 | 右上 | 角度分/对称分/时序分 + 各自计算公式（含当前参数值） |
+| 📈 角度波形 | 底部 | 近 30 帧 primary_angle 柱状波形，绿色=靠近目标/黄色=过渡区/红色=偏离，虚线标注 target_low / target_high |
+| 🎛️ 实时调参 | 底部 | 5 个滑块：底部目标/顶部目标/对称容差/角度容差/平滑系数，拖动实时生效（200ms 防抖） |
+
+**后端支持：**
+
+- `backend/routers/config.py`（新增）— 运行时调参 API：
+  - `GET /api/config/scoring` — 读取当前参数
+  - `PUT /api/config/scoring` — 部分更新参数，立即生效无需重启
+- `backend/schemas.py` — 新增 `ScoringConfig` 模型（`target_low` / `target_high` / `symmetry_max_diff` / `angle_tolerance` / `smooth_alpha`）
+- `backend/services/detector.py` — 新增 `debug_info` 字段（每帧暴露原始评分内部变量）、`apply_tuning()` / `get_tuning_params()` 方法
+- `code/pose_analyzer.py` — `PoseAnalyzer` 新增 `apply_tuning()` 方法，同步更新 `ExerciseStandard` 和 `MovementScorer` 两处的参数；`MovementScorer` 新增 `_angle_records` 列表（每帧存 (angle, dynamic_target) 对），`_dynamic_target()` 方法在过渡区用实际角度作为目标避免误罚，`angle_tolerance` 默认值从 10.0 调整为 15.0
+
+**接入方式：** `App.vue` 用 `showDebug` ref 控制显隐，`DebugOverlay` 通过 props 接收 `debug` / `score` / `phase`，滑块变更调用 `PUT /api/config/scoring`。
+
+#### 1. 对称性参数统一放宽
+
+`code/pose_analyzer.py` — 所有 10 个动作的 `symmetry_max_diff`（左右关节最大允许差异）统一设为 **25.0°**。旧值 10~20° 偏严，正常对称差异就被扣分，体验不佳。
+
+#### 2. 高分静默机制
+
+`code/guidance/context_engine.py` — 新增 `SUPPRESS_SCORE_THRESHOLD = 80`。当用户总分 > 80 分时，以下提示自动静默：
+
+| 提示类型 | 静默 |
+|----------|------|
+| ⚠ 安全警告 | ✅ 不显示 |
+| ✏ 动作纠正 | ✅ 不显示 |
+| 📊 表现反馈 | ✅ 不显示 |
+| 💪 里程碑鼓励 | ❌ 正常显示 |
+
+#### 3. 躯干角度比较方向修复（关键 Bug）
+
+`code/pose_analyzer.py` — `trunk_angle` 的计算公式为「躯干与垂直线的夹角」，**180° = 直立，前倾越多角度越小**。但 5 个错误检测的阈值比较方向全部写反（用了 `> 小数值`，永远为真，每帧都在误报）：
+
+| 错误 | 修复前 | 修复后 |
+|------|--------|--------|
+| 深蹲弓背 | `> 45.0` | `< 135.0` |
+| 侧平举身体晃动 | `> 15.0` | `< 165.0` |
+| 引体向上摆动 | `> 12.0` | `< 168.0` |
+| 高抬腿身体后仰 | `> 18.0` | `< 162.0` |
+| 肩推弓背 | `> 15.0` | `< 165.0` |
+
+#### 4. 热力图躯干参考范围修正
+
+`code/visualization.py` — `STANDARD_REFERENCE_ANGLES` 中躯干参考范围原本用「前倾度数」（如深蹲 `(10, 35)` = 前倾 10-35°），与实际 `trunk_angle`（0-180° 垂直夹角）单位不一致。已全部转为垂直夹角（`180° - 原值`），深蹲 trunk 从 `(10, 35)` → `(145, 170)`，中点 ≈ 157.5°。
+
+#### 5. 前端服务端口
+
+`frontend/src/` — API 和 WebSocket 地址统一指向 `localhost:8002`（`useWebSocket.ts`、`App.vue`、`DebugOverlay.vue`）。
+
+#### 影响范围
+
+| 文件 | 改动 |
+|------|------|
+| `code/pose_analyzer.py` | symmetry_max_diff 统一 25.0；5 个躯干角错误检测比较方向修复；新增 apply_tuning()、_angle_records / _dynamic_target()；angle_tolerance 10→15 |
+| `code/guidance/context_engine.py` | 新增 SUPPRESS_SCORE_THRESHOLD=80，三个 _check_* 方法加高分判断 |
+| `code/visualization.py` | 10 个动作 trunk 参考范围从"前倾度"转为"垂直夹角" |
+| `backend/routers/config.py` | **新增** — GET/PUT `/api/config/scoring` 运行时调参接口 |
+| `backend/schemas.py` | **新增** — `ScoringConfig` Pydantic 模型 |
+| `backend/services/detector.py` | **新增** — debug_info 字段、apply_tuning()、get_tuning_params() |
+| `backend/main.py` | 挂载 config_router |
+| `tests/test_pose_analyzer.py` | 适配新阈值：弓背测试数据、热力图躯干角测试数据 |
+| `frontend/src/components/DebugOverlay.vue` | **新增** — 开发者调试面板（角度/评分明细/波形/调参）；默认值适配 |
+| `frontend/src/types/index.ts` | **新增** — `ScoringConfig`、`DebugData` 接口 |
+| `frontend/src/composables/useWebSocket.ts` | WebSocket 地址→8002 |
+| `frontend/src/App.vue` | API 地址→8002；集成 DebugOverlay（D 键切换） |
 
 ### 常见问题
 

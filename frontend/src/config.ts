@@ -1,22 +1,25 @@
 /**
  * Centralized API configuration.
  *
- * In development, Vite reads from .env / .env.development.
- * In production (npm run build), reads from .env.production.
- * Deploy: set VITE_API_URL to your backend server URL before building.
- *
- * Example:
- *   VITE_API_URL=https://your-server.com npm run build
+ * Defaults to relative URLs (empty API_BASE) — requests go to same origin.
+ * Vercel production uses rewrites to proxy /api/* and /ws/* to ECS backend.
+ * Local development: set VITE_API_URL=http://localhost:8002 in .env.local
  */
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8002'
-
-// Derive WebSocket URL from HTTP URL
-const wsBase = API_BASE.replace(/^http/, 'ws')
+// WebSocket URL: derive from current page or use API_BASE
+function getWsUrl(): string {
+  if (API_BASE) {
+    return API_BASE.replace(/^http/, 'ws') + '/ws/detect'
+  }
+  // Relative: use same origin, auto-detect wss:// for HTTPS
+  const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${proto}//${typeof window !== 'undefined' ? window.location.host : 'localhost:8002'}/ws/detect`
+}
 
 export const config = {
   apiBase: API_BASE,
-  wsUrl: `${wsBase}/ws/detect`,
+  wsUrl: getWsUrl(),
   endpoints: {
     health: `${API_BASE}/api/health`,
     exercises: `${API_BASE}/api/exercises`,

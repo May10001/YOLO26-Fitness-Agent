@@ -91,6 +91,51 @@ class DetectorService:
                     ],
                 }
 
+        # --- Debug: expose raw scoring internals for the frontend debug overlay ---
+        std = self.analyzer.standard if self.analyzer else None
+        angles = analysis.angles
+        temporal = analysis.temporal
+        primary_angle = angles.primary_angle(self.current_exercise) if angles else None
+
+        # Dynamic target (same logic as MovementScorer._dynamic_target)
+        if std and primary_angle is not None:
+            phase = analysis.phase
+            low_min, low_max = std.low_range
+            high_min, high_max = std.high_range
+            if phase in ("低位", "保持"):
+                if low_min <= primary_angle <= low_max:
+                    target_angle = primary_angle  # 范围内 → 合标
+                elif low_max < primary_angle < high_min:
+                    target_angle = primary_angle  # 过渡区 → 不罚
+                else:
+                    target_angle = std.target_low   # 超范围 → 惩罚
+            else:
+                if high_min <= primary_angle <= high_max:
+                    target_angle = primary_angle  # 范围内 → 合标
+                elif low_max < primary_angle < high_min:
+                    target_angle = primary_angle  # 过渡区 → 不罚
+                else:
+                    target_angle = std.target_high  # 超范围 → 惩罚
+        else:
+            target_angle = None
+
+        # Knee symmetry (for squat: primary joint is knee)
+        knee_diff = angles.diff_symmetric("knee") if angles else None
+
+        debug_info = {
+            "primary_angle": round(primary_angle, 1) if primary_angle is not None else None,
+            "knee_left": round(angles.knee_left, 1) if angles and angles.knee_left is not None else None,
+            "knee_right": round(angles.knee_right, 1) if angles and angles.knee_right is not None else None,
+            "target_angle": round(target_angle, 1) if target_angle is not None else None,
+            "deviation": round(abs(primary_angle - target_angle), 1)
+                         if primary_angle is not None and target_angle is not None else None,
+            "knee_diff": round(knee_diff, 1) if knee_diff is not None else None,
+            "symmetry_max_diff": std.symmetry_max_diff if std else None,
+            "temporal_rhythm_cv": round(temporal.rhythm_consistency, 3),
+            "temporal_smoothness": round(temporal.smoothness, 1),
+            "angular_velocity": round(temporal.angular_velocity, 1),
+        }
+
         return {
             "detected": True,
             "keypoints": keypoints.tolist(),
@@ -110,6 +155,7 @@ class DetectorService:
             "guidance": guidance,
             "trigger_context": trigger_context,
             "heatmap": heatmap_data,
+            "debug": debug_info,
         }
 
     def get_session_stats(self) -> dict:
@@ -120,6 +166,25 @@ class DetectorService:
             "best_score": round(float(np.max(scores)), 1) if scores else 0.0,
             "avg_score": round(float(np.mean(scores)), 1) if scores else 0.0,
             "error_counts": getattr(self.analyzer, '_error_detector', None) and dict(self.analyzer._error_detector._error_counter) or {},
+        }
+
+    def apply_tuning(self, params: dict):
+        """运行时调参 — 同步更新 PoseAnalyzer 和其内部 Scorer."""
+        if self.analyzer:
+            self.analyzer.apply_tuning(**params)
+
+    def get_tuning_params(self) -> dict:
+        """返回当前可调参数值, 供前端初始化滑块."""
+        if not self.analyzer:
+            return {}
+        std = self.analyzer.standard
+        scorer = self.analyzer._scorer
+        return {
+            "target_low": std.target_low,
+            "target_high": std.target_high,
+            "symmetry_max_diff": std.symmetry_max_diff,
+            "angle_tolerance": scorer.angle_tolerance,
+            "smooth_alpha": scorer.smooth_alpha,
         }
 
     def reset(self):

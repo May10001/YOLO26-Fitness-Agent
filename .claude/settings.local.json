@@ -25,7 +25,9 @@
       "Bash(timeout 15 python scripts/test_remote_api.py -q \"你好，1+1等于几？\")",
       "Bash(timeout 6 python -c ' *)",
       "Bash(python -c \"from code.langgraph_agent import CoachAgent, CoachAgentState, create_coach_graph; print\\('All imports OK'\\); print\\(f'State fields: {list\\(CoachAgentState.__annotations__.keys\\(\\)\\)}'\\)\")",
-      "Bash(python -m code.langgraph_agent.agent)"
+      "Bash(python -m code.langgraph_agent.agent)",
+      "Bash(npx vue-tsc *)",
+      "Bash(npx vite *)"
     ]
   }
 }

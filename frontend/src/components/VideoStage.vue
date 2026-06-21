@@ -1,6 +1,9 @@
 <template>
-  <div class="flex-1 rounded-2xl overflow-hidden relative transition-all duration-700" :class="glowClass">
+  <div class="rounded-2xl overflow-hidden relative transition-all duration-700 h-full" :class="glowClass">
     <video ref="videoEl" class="w-full h-full object-cover" muted playsinline />
+<<<<<<< HEAD
+
+=======
     <SkeletonOverlay
       v-if="result?.keypoints"
       :keypoints="result.keypoints"
@@ -8,6 +11,13 @@
       :video-width="640"
       :video-height="480"
     />
+    <DebugOverlay
+      v-if="showDebug && result?.debug"
+      :debug="result.debug"
+      :score="score"
+      :phase="result?.phase || ''"
+    />
+>>>>>>> e4bb34e2bbe399b6ab6a5d498c73f944eed06a8a
     <GaugeBar direction="left" :value="score.angle" :max="40" />
     <GaugeBar direction="right" :value="score.symmetry" :max="30" />
     <GaugeBar direction="bottom" :value="score.temporal" :max="30" />
@@ -66,9 +76,13 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { DetectionResult, ScoreData, GuidanceData } from '../types'
+import type { DetectionResult, ScoreData, GuidanceData, DebugData } from '../types'
 import GaugeBar from './GaugeBar.vue'
+<<<<<<< HEAD
+=======
 import SkeletonOverlay from './SkeletonOverlay.vue'
+import DebugOverlay from './DebugOverlay.vue'
+>>>>>>> e4bb34e2bbe399b6ab6a5d498c73f944eed06a8a
 
 const props = defineProps<{
   result: DetectionResult | null
@@ -78,6 +92,7 @@ const props = defineProps<{
   formattedTime: string
   fps: number
   stream: MediaStream | null
+  showDebug?: boolean
 }>()
 
 const videoEl = ref<HTMLVideoElement | null>(null)

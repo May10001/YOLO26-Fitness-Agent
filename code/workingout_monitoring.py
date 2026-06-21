@@ -1,8 +1,10 @@
 import argparse
 import math
+import os
 import sys
 import time
 import tkinter as tk
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -10,6 +12,10 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 from ultralytics import YOLO
+
+# 抑制 OpenCV DSHOW 后端探测警告
+os.environ["OPENCV_VIDEOIO_DEBUG"] = "0"
+os.environ["OPENCV_LOG_LEVEL"] = "ERROR"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from code.pose_analyzer import PoseAnalyzer, EXERCISE_STANDARDS
@@ -349,6 +355,7 @@ class WorkoutMonitoringApp:
         self.show_skeleton = tk.BooleanVar(value=True)
         self.show_labels = tk.BooleanVar(value=True)
         self.mirror_camera = tk.BooleanVar(value=True)
+        self.show_debug = tk.BooleanVar(value=True)  # 调试面板开关
         self.status_text = tk.StringVar(value="就绪：选择动作后点击启动摄像头")
         self.count_text = tk.StringVar(value="0")
         self.phase_text = tk.StringVar(value="等待")
@@ -361,9 +368,36 @@ class WorkoutMonitoringApp:
         self.hold_time_text = tk.StringVar(value="0.0s")
         self.errors_text = tk.StringVar(value="")
 
+        # ==== 调试面板: 历史缓冲区 ====
+        self._angle_history = deque(maxlen=150)       # EMA 平滑后膝角
+        self._raw_angle_history = deque(maxlen=150)   # 原始膝角
+        self._knee_left_history = deque(maxlen=150)   # 左膝角
+        self._knee_right_history = deque(maxlen=150)  # 右膝角
+        self._score_history = deque(maxlen=150)       # 总分
+        self._angle_score_hist = deque(maxlen=150)    # 角度得分
+        self._temporal_score_hist = deque(maxlen=150) # 时序得分
+        self._symmetry_score_hist = deque(maxlen=150) # 对称得分
+        self._phase_history = deque(maxlen=150)       # 相位历史
+        self._overall_rating_text = ""                 # 最新总体评分文本
+        self._overall_rating_timer = 0                 # 总体评分显示倒计时(帧数)
+
+        # ==== 调试面板: 可调参数 (实时生效) ====
+        self.debug_angle_tolerance = 10.0        # 角度高斯容差 (°)
+        self.debug_symmetry_threshold = 12.0     # 对称性阈值 (°)
+        self.debug_smooth_alpha = 0.7            # EMA 平滑系数
+        self.debug_low_min = 70.0                # 低位最低有效角度
+        self.debug_low_max = 110.0               # 低位最高有效角度
+        self.debug_high_min = 155.0              # 高位最低有效角度
+        self.debug_high_max = 180.0              # 高位最高有效角度
+        self.debug_target_low = 90.0             # 低位目标角度
+        self.debug_target_high = 170.0           # 高位目标角度
+
         self._setup_style()
         self._build_layout()
         self._on_exercise_change()
+
+        # 键盘快捷键绑定
+        self.root.bind('<Key>', self._on_key_press)
 
     def _setup_style(self):
         style = ttk.Style()
@@ -467,9 +501,14 @@ class WorkoutMonitoringApp:
         )
         side_box.pack(fill=tk.X, pady=(4, 10))
 
-        ttk.Label(control, text="摄像头编号", style="Panel.TLabel").pack(anchor="w")
-        ttk.Spinbox(control, from_=0, to=8, textvariable=self.camera_index, width=8).pack(
-            fill=tk.X, pady=(4, 10)
+        cam_row = ttk.Frame(control, style="Panel.TFrame")
+        cam_row.pack(fill=tk.X, pady=(4, 10))
+        ttk.Label(cam_row, text="摄像头编号", style="Panel.TLabel").pack(anchor="w")
+        ttk.Spinbox(cam_row, from_=0, to=8, textvariable=self.camera_index, width=5).pack(
+            side=tk.LEFT
+        )
+        ttk.Button(cam_row, text="检测", command=self._detect_cameras, width=5).pack(
+            side=tk.RIGHT, padx=(4, 0)
         )
 
         ttk.Label(control, text="模型路径", style="Panel.TLabel").pack(anchor="w")
@@ -491,6 +530,7 @@ class WorkoutMonitoringApp:
         ttk.Checkbutton(control, text="显示骨架连线", variable=self.show_skeleton).pack(anchor="w", pady=2)
         ttk.Checkbutton(control, text="显示关键点编号", variable=self.show_labels).pack(anchor="w", pady=2)
         ttk.Checkbutton(control, text="镜像摄像头画面", variable=self.mirror_camera).pack(anchor="w", pady=2)
+        ttk.Checkbutton(control, text="调试面板 (可按键调参)", variable=self.show_debug).pack(anchor="w", pady=2)
 
         ttk.Separator(control).pack(fill=tk.X, pady=16)
 
@@ -521,6 +561,36 @@ class WorkoutMonitoringApp:
             self.model_path.set(path)
             self.model = None
             self.status_text.set("模型路径已更新，启动时会重新加载")
+
+    def _detect_cameras(self):
+        """自动检测可用摄像头并列出分辨率."""
+        found = []
+        for i in range(9):
+            cap = cv2.VideoCapture(i)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            if cap.isOpened():
+                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                ok, frame = cap.read()
+                brightness = frame.mean() if ok else -1
+                found.append((i, w, h, brightness))
+                cap.release()
+            else:
+                found.append((i, 0, 0, -1))
+
+        lines = []
+        for i, w, h, b in found:
+            if w > 0 and b >= 0:
+                status = f"{w}x{h} 亮度={b:.0f}"
+            elif w > 0:
+                status = f"{w}x{h} 但无法读取画面"
+            else:
+                status = "不可用"
+            lines.append(f"  #{i}: {status}")
+
+        msg = "摄像头检测结果:\n" + "\n".join(lines) + "\n\n请在右侧选择可用的摄像头编号"
+        messagebox.showinfo("摄像头检测", msg)
 
     def _on_exercise_change(self):
         exercise = self.exercise_name.get()
@@ -557,9 +627,9 @@ class WorkoutMonitoringApp:
                 self.root.update_idletasks()
                 self.model = YOLO(str(model_path))
 
-            self.capture = cv2.VideoCapture(int(self.camera_index.get()), cv2.CAP_DSHOW)
+            self.capture = cv2.VideoCapture(int(self.camera_index.get()))
             if not self.capture.isOpened():
-                self.capture = cv2.VideoCapture(int(self.camera_index.get()))
+                self.capture = cv2.VideoCapture(int(self.camera_index.get()), cv2.CAP_DSHOW)
             if not self.capture.isOpened():
                 raise RuntimeError("摄像头打开失败，请检查编号或系统权限")
 
@@ -593,6 +663,466 @@ class WorkoutMonitoringApp:
         self.symmetry_score_text.set("--")
         self.hold_time_text.set("0.0s")
         self.errors_text.set("")
+        # 清空调试历史
+        self._angle_history.clear()
+        self._raw_angle_history.clear()
+        self._knee_left_history.clear()
+        self._knee_right_history.clear()
+        self._score_history.clear()
+        self._angle_score_hist.clear()
+        self._temporal_score_hist.clear()
+        self._symmetry_score_hist.clear()
+        self._phase_history.clear()
+        self._overall_rating_text = ""
+        self._overall_rating_timer = 0
+
+    # ================================================================
+    # 调试面板 — 数据采集与参数调节
+    # ================================================================
+
+    def _collect_debug_data(self, analysis, exercise):
+        """采集每帧数据到历史缓冲区."""
+        # 膝角数据
+        primary = analysis.angles.primary_angle(exercise)
+        if primary is not None:
+            self._raw_angle_history.append(primary)
+            # 从 scorer 内部获取 EMA 平滑后的角度
+            if hasattr(self.analyzer, '_scorer') and self.analyzer._scorer._smoothed_angles:
+                self._angle_history.append(self.analyzer._scorer._smoothed_angles[-1])
+            else:
+                self._angle_history.append(primary)
+        self._knee_left_history.append(
+            analysis.angles.knee_left if analysis.angles.knee_left is not None else 0)
+        self._knee_right_history.append(
+            analysis.angles.knee_right if analysis.angles.knee_right is not None else 0)
+        self._phase_history.append(analysis.phase)
+
+        # 分数数据
+        self._score_history.append(analysis.score.total)
+        self._angle_score_hist.append(analysis.score.angle_score)
+        self._temporal_score_hist.append(analysis.score.temporal_score)
+        self._symmetry_score_hist.append(analysis.score.symmetry_score)
+
+        # 总体评分倒计时
+        if self._overall_rating_timer > 0:
+            self._overall_rating_timer -= 1
+        else:
+            self._overall_rating_text = ""
+
+    def _apply_debug_params(self):
+        """将可调参数实时写入 scorer 和 standard."""
+        if self.analyzer is None:
+            return
+        scorer = self.analyzer._scorer
+        standard = self.analyzer.standard
+
+        # 直接修改 scorer 内部参数
+        scorer.smooth_alpha = self.debug_smooth_alpha
+        scorer.angle_tolerance = self.debug_angle_tolerance
+        # 修改 standard 参数 (会影响相位检测和评分)
+        standard.low_range = (self.debug_low_min, self.debug_low_max)
+        standard.high_range = (self.debug_high_min, self.debug_high_max)
+        standard.target_low = self.debug_target_low
+        standard.target_high = self.debug_target_high
+        standard.symmetry_max_diff = self.debug_symmetry_threshold
+
+    def _draw_debug_panel(self, frame, analysis, exercise):
+        """绘制完整的调试面板叠加层."""
+        h, w = frame.shape[:2]
+
+        # ── 左上: 增强信息面板 ──
+        self._draw_info_panel(frame, analysis, exercise)
+
+        # ── 右上: 角度历史曲线 ──
+        chart_w, chart_h = 260, 140
+        self._draw_angle_chart(frame, w - chart_w - 12, 12, chart_w, chart_h)
+
+        # ── 右中: 分数历史曲线 ──
+        self._draw_score_chart(frame, w - chart_w - 12, 164, chart_w, 120)
+
+        # ── 右下: 左右膝角对比条 ──
+        self._draw_symmetry_gauge(frame, w - chart_w - 12, 296, chart_w, 60, analysis)
+
+        # ── 底部: 键盘快捷键栏 ──
+        self._draw_keybind_bar(frame)
+
+        # ── 总体评分弹窗 ──
+        if self._overall_rating_text and self._overall_rating_timer > 0:
+            self._draw_overall_popup(frame)
+
+    def _draw_info_panel(self, frame, analysis, exercise):
+        """左上角信息面板 — 角度详情 + 得分细分."""
+        std = self.analyzer.standard if self.analyzer else None
+
+        lines = []
+        # 动作 + 计数 + 相位
+        phase = analysis.phase
+        phase_color = {
+            "高位": (100, 255, 100), "低位": (100, 180, 255),
+            "保持": (255, 200, 100), "等待": (180, 180, 180),
+            "姿态调整": (255, 150, 100),
+        }.get(phase, (255, 255, 255))
+
+        lines.append(("count", f"┃ {exercise}  #{analysis.count}"))
+        lines.append(("phase", f"┃ 相位: {phase}"))
+        lines.append(("angle", f"┃ 膝角均值: {self._format_metric(analysis.angles.primary_angle(exercise), exercise)}"))
+        if analysis.angles.knee_left is not None and analysis.angles.knee_right is not None:
+            lines.append(("lr", f"┃   L: {analysis.angles.knee_left:.0f}°  R: {analysis.angles.knee_right:.0f}°"))
+        if std:
+            if phase in ("低位", "保持"):
+                tgt = self.debug_target_low
+                rng = (self.debug_low_min, self.debug_low_max)
+            else:
+                tgt = self.debug_target_high
+                rng = (self.debug_high_min, self.debug_high_max)
+            lines.append(("target", f"┃ 目标: {tgt:.0f}°  范围: [{rng[0]:.0f}, {rng[1]:.0f}]"))
+        lines.append(("sep1", "┃ ─────────────────"))
+        lines.append(("score", f"┃ 总分: {analysis.score.total:.0f}/100"))
+        lines.append(("angle_s", f"┃  角度 {analysis.score.angle_score:.0f}/40  "
+                   f"({analysis.score.angle_score/40*100:.0f}%)"))
+        lines.append(("temp_s", f"┃  时序 {analysis.score.temporal_score:.0f}/30  "
+                   f"({analysis.score.temporal_score/30*100:.0f}%)"))
+        lines.append(("sym_s",  f"┃  对称 {analysis.score.symmetry_score:.0f}/30  "
+                   f"({analysis.score.symmetry_score/30*100:.0f}%)"))
+
+        # 绘制面板背景
+        n = len(lines)
+        panel_h = 20 * n + 20
+        panel_w = 310
+        x, y = 10, 10
+        cv2.rectangle(frame, (x, y), (x + panel_w, y + panel_h), (15, 23, 42), -1)
+        cv2.rectangle(frame, (x, y), (x + panel_w, y + panel_h), (60, 60, 80), 1)
+
+        y_offset = y + 18
+        for key, text in lines:
+            if key == "sep1":
+                y_offset += 6
+                cv2.line(frame, (x + 14, y_offset), (x + panel_w - 14, y_offset),
+                         (60, 60, 80), 1)
+                y_offset += 6
+                continue
+            if key == "phase":
+                color = phase_color
+            elif key == "score":
+                s = analysis.score.total
+                if s >= 85:
+                    color = (100, 255, 100)
+                elif s >= 70:
+                    color = (200, 255, 100)
+                elif s >= 50:
+                    color = (100, 200, 255)
+                else:
+                    color = (100, 100, 255)
+            elif key in ("angle_s", "temp_s", "sym_s"):
+                if key == "angle_s":
+                    pct = analysis.score.angle_score / 40
+                elif key == "temp_s":
+                    pct = analysis.score.temporal_score / 30
+                else:
+                    pct = analysis.score.symmetry_score / 30
+                if pct >= 0.85:
+                    color = (100, 255, 100)
+                elif pct >= 0.60:
+                    color = (100, 200, 255)
+                else:
+                    color = (100, 100, 255)
+            else:
+                color = (220, 220, 220)
+
+            cv2.putText(frame, text, (x + 12, y_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.44, color, 1, cv2.LINE_AA)
+            y_offset += 20
+
+    def _draw_angle_chart(self, frame, x, y, w, h):
+        """右上: 膝角历史曲线 (原始 + 平滑)."""
+        # 背景
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (18, 25, 45), -1)
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (60, 70, 100), 1)
+
+        # 标题
+        cv2.putText(frame, "Knee Angle", (x + 6, y + 16),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1, cv2.LINE_AA)
+
+        plot_x, plot_y = x + 8, y + 24
+        plot_w, plot_h = w - 16, h - 42
+
+        # 目标区域 (高位绿带, 低位蓝带)
+        high_min_y = self._angle_to_y(plot_y, plot_h, self.debug_high_min, 60, 180)
+        high_max_y = self._angle_to_y(plot_y, plot_h, self.debug_high_max, 60, 180)
+        low_min_y = self._angle_to_y(plot_y, plot_h, self.debug_low_min, 60, 180)
+        low_max_y = self._angle_to_y(plot_y, plot_h, self.debug_low_max, 60, 180)
+
+        # 高位目标带 (绿色半透明)
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (plot_x, high_max_y), (plot_x + plot_w, high_min_y),
+                      (40, 80, 40), -1)
+        frame[:] = cv2.addWeighted(frame, 0.85, overlay, 0.15, 0)
+        # 低位目标带 (蓝色半透明)
+        overlay2 = frame.copy()
+        cv2.rectangle(overlay2, (plot_x, low_max_y), (plot_x + plot_w, low_min_y),
+                      (60, 40, 20), -1)
+        frame[:] = cv2.addWeighted(frame, 0.85, overlay2, 0.15, 0)
+
+        # 目标线
+        tgt_high_y = self._angle_to_y(plot_y, plot_h, self.debug_target_high, 60, 180)
+        tgt_low_y = self._angle_to_y(plot_y, plot_h, self.debug_target_low, 60, 180)
+        cv2.line(frame, (plot_x, tgt_high_y), (plot_x + plot_w, tgt_high_y),
+                 (80, 180, 80), 1, cv2.LINE_AA)
+        cv2.line(frame, (plot_x, tgt_low_y), (plot_x + plot_w, tgt_low_y),
+                 (180, 120, 60), 1, cv2.LINE_AA)
+
+        # 原始角度线 (细, 半透明)
+        self._draw_line_series(frame, plot_x, plot_y, plot_w, plot_h,
+                               self._raw_angle_history, (100, 120, 150), 1, 60, 180)
+        # 平滑角度线 (粗, 亮色)
+        self._draw_line_series(frame, plot_x, plot_y, plot_w, plot_h,
+                               self._angle_history, (80, 220, 255), 2, 60, 180)
+
+        # 图例
+        ly = y + h - 10
+        cv2.line(frame, (x + 8, ly), (x + 28, ly), (100, 120, 150), 1)
+        cv2.putText(frame, "raw", (x + 32, ly + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, (150, 150, 150), 1)
+        cv2.line(frame, (x + 68, ly), (x + 88, ly), (80, 220, 255), 2)
+        cv2.putText(frame, "smooth", (x + 92, ly + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, (150, 150, 150), 1)
+        # 当前值
+        if self._angle_history:
+            val = self._angle_history[-1]
+            cv2.putText(frame, f"{val:.0f}", (x + w - 40, ly + 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (80, 220, 255), 1, cv2.LINE_AA)
+
+    def _draw_score_chart(self, frame, x, y, w, h):
+        """右中: 分数历史曲线."""
+        # 背景
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (18, 25, 45), -1)
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (60, 70, 100), 1)
+
+        # 标题
+        cv2.putText(frame, "Score", (x + 6, y + 16),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1, cv2.LINE_AA)
+
+        plot_x, plot_y = x + 8, y + 22
+        plot_w, plot_h = w - 16, h - 36
+
+        # 得分区背景 (绿/黄/红 横带)
+        overlay = frame.copy()
+        # >= 85 绿色带
+        good_y = plot_y + int(plot_h * 0.15)
+        cv2.rectangle(overlay, (plot_x, plot_y), (plot_x + plot_w, good_y),
+                      (20, 70, 20), -1)
+        # 50-85 黄色带
+        mid_y = plot_y + int(plot_h * 0.50)
+        cv2.rectangle(overlay, (plot_x, good_y), (plot_x + plot_w, mid_y),
+                      (40, 40, 15), -1)
+        # < 50 红色带
+        cv2.rectangle(overlay, (plot_x, mid_y), (plot_x + plot_w, plot_y + plot_h),
+                      (40, 15, 15), -1)
+        frame[:] = cv2.addWeighted(frame, 0.92, overlay, 0.08, 0)
+
+        # 分数线
+        self._draw_line_series(frame, plot_x, plot_y, plot_w, plot_h,
+                               self._score_history, (100, 255, 180), 2, 0, 100)
+        # 角度得分线
+        self._draw_line_series(frame, plot_x, plot_y + 1, plot_w, plot_h,
+                               [v / 40.0 * 100 for v in self._angle_score_hist],
+                               (120, 200, 255), 1, 0, 100)
+        # 对称得分线
+        self._draw_line_series(frame, plot_x, plot_y + 1, plot_w, plot_h,
+                               [v / 30.0 * 100 for v in self._symmetry_score_hist],
+                               (200, 160, 255), 1, 0, 100)
+
+        # 图例
+        ly = y + h - 6
+        cv2.line(frame, (x + 8, ly), (x + 20, ly), (100, 255, 180), 2)
+        cv2.putText(frame, "tot", (x + 22, ly + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.32, (150, 150, 150), 1)
+        cv2.line(frame, (x + 50, ly), (x + 62, ly), (120, 200, 255), 1)
+        cv2.putText(frame, "ang", (x + 64, ly + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.32, (150, 150, 150), 1)
+        cv2.line(frame, (x + 92, ly), (x + 104, ly), (200, 160, 255), 1)
+        cv2.putText(frame, "sym", (x + 106, ly + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.32, (150, 150, 150), 1)
+        # 当前分数
+        if self._score_history:
+            val = self._score_history[-1]
+            color = (100, 255, 100) if val >= 85 else (200, 255, 100) if val >= 70 else (100, 200, 255) if val >= 50 else (150, 100, 255)
+            cv2.putText(frame, f"{val:.0f}", (x + w - 35, ly + 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+
+    def _draw_symmetry_gauge(self, frame, x, y, w, h, analysis):
+        """右下: 左右膝角实时对比条."""
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (18, 25, 45), -1)
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (60, 70, 100), 1)
+
+        cv2.putText(frame, "L/R Knee", (x + 6, y + 14),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.40, (200, 200, 200), 1, cv2.LINE_AA)
+
+        # 左膝条
+        bar_x, bar_y = x + 14, y + 22
+        bar_w, bar_h = w - 28, 12
+        l_val = analysis.angles.knee_left or 0
+        r_val = analysis.angles.knee_right or 0
+        l_pct = max(0, min(1.0, l_val / 180.0))
+        r_pct = max(0, min(1.0, r_val / 180.0))
+
+        # 左膝
+        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h),
+                      (50, 50, 50), -1)
+        cv2.rectangle(frame, (bar_x, bar_y),
+                      (bar_x + int(bar_w * l_pct), bar_y + bar_h),
+                      (255, 150, 50), -1)
+        cv2.putText(frame, f"L: {l_val:.0f}", (bar_x + 4, bar_y + 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
+
+        # 右膝
+        bar_y2 = bar_y + bar_h + 5
+        cv2.rectangle(frame, (bar_x, bar_y2), (bar_x + bar_w, bar_y2 + bar_h),
+                      (50, 50, 50), -1)
+        cv2.rectangle(frame, (bar_x, bar_y2),
+                      (bar_x + int(bar_w * r_pct), bar_y2 + bar_h),
+                      (50, 180, 255), -1)
+        cv2.putText(frame, f"R: {r_val:.0f}", (bar_x + 4, bar_y2 + 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
+
+        # 差异提示
+        if l_val > 0 and r_val > 0:
+            diff = abs(l_val - r_val)
+            diff_color = (100, 255, 100) if diff < self.debug_symmetry_threshold else (100, 100, 255)
+            cv2.putText(frame, f"diff: {diff:.0f} (limit: {self.debug_symmetry_threshold:.0f})",
+                        (bar_x, bar_y2 + bar_h + 12),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, diff_color, 1, cv2.LINE_AA)
+
+    def _draw_keybind_bar(self, frame):
+        """底部: 键盘快捷键提示条."""
+        h, w = frame.shape[:2]
+        bar_h = 24
+        y = h - bar_h
+
+        cv2.rectangle(frame, (0, y), (w, h), (10, 15, 30), -1)
+        cv2.line(frame, (0, y), (w, y), (60, 70, 100), 1)
+
+        keys = [
+            "[1/2]容差", "[3/4]对称阈值", "[5/6]EMA",
+            "[7/8]低位", "[9/0]高位", "[O]总体评分",
+            "[R]重置", "[D]面板开关", "[Q]退出",
+        ]
+        x_off = 8
+        for key_text in keys:
+            (tw, th), _ = cv2.getTextSize(key_text, cv2.FONT_HERSHEY_SIMPLEX, 0.38, 1)
+            cv2.putText(frame, key_text, (x_off, y + 16),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.38, (180, 190, 210), 1, cv2.LINE_AA)
+            x_off += tw + 12
+
+    def _draw_overall_popup(self, frame):
+        """总体评分弹窗 (居中)."""
+        h, w = frame.shape[:2]
+        lines = self._overall_rating_text.split('\n')
+        line_h = 26
+        popup_h = len(lines) * line_h + 40
+        popup_w = 420
+        px, py = (w - popup_w) // 2, (h - popup_h) // 2
+
+        # 背景
+        cv2.rectangle(frame, (px, py), (px + popup_w, py + popup_h), (20, 25, 50), -1)
+        cv2.rectangle(frame, (px, py), (px + popup_w, py + popup_h), (100, 200, 150), 2)
+
+        y_off = py + 24
+        for line in lines:
+            cv2.putText(frame, line, (px + 16, y_off),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.48, (230, 240, 255), 1, cv2.LINE_AA)
+            y_off += line_h
+
+    # ================================================================
+    # 调试面板 — 绘图工具函数
+    # ================================================================
+
+    @staticmethod
+    def _draw_line_series(frame, px, py, pw, ph, data, color, thickness, y_min, y_max):
+        """在指定区域绘制折线图."""
+        if len(data) < 2:
+            return
+        pts = []
+        y_range = max(y_max - y_min, 1.0)
+        for i, v in enumerate(data):
+            x = px + int(pw * i / (len(data) - 1))
+            y_clamped = max(y_min, min(y_max, v))
+            y = py + int(ph * (1.0 - (y_clamped - y_min) / y_range))
+            pts.append([x, y])
+        pts_arr = np.array(pts, dtype=np.int32)
+        cv2.polylines(frame, [pts_arr], False, color, thickness, cv2.LINE_AA)
+
+    @staticmethod
+    def _angle_to_y(py, ph, angle, y_min, y_max):
+        """角度值 → 像素 y 坐标."""
+        y_range = max(y_max - y_min, 1.0)
+        a = max(y_min, min(y_max, angle))
+        return py + int(ph * (1.0 - (a - y_min) / y_range))
+
+    # ================================================================
+    # 调试面板 — 键盘处理
+    # ================================================================
+
+    def _on_key_press(self, event):
+        """键盘快捷键处理."""
+        key = event.char.lower() if event.char else event.keysym
+
+        if key == 'd':
+            # 切换调试面板
+            self.show_debug.set(not self.show_debug.get())
+        elif key == 'r':
+            self.reset_count()
+        elif key == 'q':
+            self.close()
+        elif key == '1':
+            self.debug_angle_tolerance = max(1.0, self.debug_angle_tolerance - 1)
+        elif key == '2':
+            self.debug_angle_tolerance = min(30.0, self.debug_angle_tolerance + 1)
+        elif key == '3':
+            self.debug_symmetry_threshold = max(3.0, self.debug_symmetry_threshold - 1)
+        elif key == '4':
+            self.debug_symmetry_threshold = min(30.0, self.debug_symmetry_threshold + 1)
+        elif key == '5':
+            self.debug_smooth_alpha = max(0.1, round(self.debug_smooth_alpha - 0.05, 2))
+        elif key == '6':
+            self.debug_smooth_alpha = min(1.0, round(self.debug_smooth_alpha + 0.05, 2))
+        elif key == '7':
+            self.debug_low_min = max(40.0, self.debug_low_min - 2)
+        elif key == '8':
+            self.debug_low_max = min(130.0, self.debug_low_max + 2)
+        elif key == '9':
+            self.debug_high_min = max(130.0, self.debug_high_min - 2)
+        elif key == '0':
+            self.debug_high_max = min(190.0, self.debug_high_max + 2)
+        elif key == 'o':
+            # 显示总体评分报告
+            if self.analyzer is not None:
+                overall = self.analyzer.get_overall_rating()
+                self._overall_rating_text = (
+                    f"🏆 总体评分报告\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"综合评分: {overall.total_score:.0f}/100  {overall.grade_emoji} {overall.grade}\n"
+                    f"趋势: {overall.trend}   总次数: {overall.total_reps}   时长: {overall.total_duration_seconds:.0f}s\n"
+                    f"分维度: {overall.dimension_breakdown}\n"
+                    f"亮点: {overall.highlight}   短板: {overall.weakness}\n"
+                    f"建议: {overall.suggestion}"
+                )
+                self._overall_rating_timer = 180  # 显示 180 帧 (~6秒 @30fps)
+
+        # 更新键盘栏中显示的可调参数值
+        self._update_keybind_bar_text()
+
+    def _update_keybind_bar_text(self):
+        """将当前参数值反映到状态栏 (通过 status_text)."""
+        params = (
+            f"容差={self.debug_angle_tolerance:.0f} "
+            f"对称={self.debug_symmetry_threshold:.0f} "
+            f"EMA={self.debug_smooth_alpha:.2f} "
+            f"低位=[{self.debug_low_min:.0f},{self.debug_low_max:.0f}] "
+            f"高位=[{self.debug_high_min:.0f},{self.debug_high_max:.0f}]"
+        )
+        if self.running:
+            self.status_text.set(f"检测中 | {params}")
 
     def close(self):
         self.stop()
@@ -675,6 +1205,16 @@ class WorkoutMonitoringApp:
             self._draw_skeleton(frame, keypoints, confidences)
         self._draw_keypoints(frame, keypoints, confidences)
         self._draw_overlay(frame, count, phase, metric, exercise)
+
+        # ==== 调试面板 ====
+        if self.show_debug.get() and self.analyzer is not None:
+            # 采集历史数据
+            self._collect_debug_data(analysis, exercise)
+            # 应用可调参数到 scorer
+            self._apply_debug_params()
+            # 绘制调试面板
+            self._draw_debug_panel(frame, analysis, exercise)
+
         return frame
 
     def _select_person(self, result):

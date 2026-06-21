@@ -1,7 +1,8 @@
 import { ref } from 'vue'
 import type { DetectionResult, GuidanceData, CoachMessage } from '../types'
+import { config } from '../config'
 
-export function useWebSocket(url: string = 'ws://localhost:8000/ws/detect') {
+export function useWebSocket(url: string = config.wsUrl) {
   const ws = ref<WebSocket | null>(null)
   const connected = ref(false)
   const lastResult = ref<DetectionResult | null>(null)

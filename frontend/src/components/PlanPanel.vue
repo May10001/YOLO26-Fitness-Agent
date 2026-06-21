@@ -54,6 +54,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import type { WeeklyPlan } from '../types'
+import { config } from '../config'
 
 const profile = reactive({
   name: '用户',
@@ -75,13 +76,13 @@ async function generatePlan() {
   plan.value = null
   try {
     // Save profile first
-    await fetch('http://localhost:8000/api/profile', {
+    await fetch(config.endpoints.profile, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(profile),
     })
     // Generate plan
-    const res = await fetch('http://localhost:8000/api/plan/generate', {
+    const res = await fetch(config.endpoints.planGenerate, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(profile),

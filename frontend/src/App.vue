@@ -2,8 +2,9 @@
   <EntryScreen v-if="showEntry" @enter="showEntry = false" />
   <ParticleBackground :is-training="training.isRunning.value" />
   <div class="relative z-10 h-screen w-screen p-3 flex gap-3">
-    <div class="flex-[2.2] flex flex-col gap-3">
+    <div class="flex-[2.2] flex flex-col gap-3 relative">
       <VideoStage
+        class="flex-[3]"
         :result="ws.lastResult.value"
         :guidance="ws.lastGuidance.value"
         :exercise="currentExercise"
@@ -11,7 +12,28 @@
         :formatted-time="training.formattedTime.value"
         :fps="fps"
         :stream="camera.stream.value"
+        :show-debug="showDebug"
       />
+<<<<<<< HEAD
+      <PoseViewer
+        class="flex-[2]"
+        :keypoints="ws.lastResult.value?.keypoints || null"
+        :errors="ws.lastResult.value?.errors || []"
+        :score-total="currentScore.total"
+      />
+=======
+      <!-- Debug toggle button -->
+      <button
+        class="absolute top-6 right-8 z-30 px-2.5 py-1 rounded-full text-[9px] font-bold border transition-all duration-300"
+        :class="showDebug
+          ? 'bg-flame/30 text-flame border-flame/50 shadow-[0_0_12px_rgba(255,106,0,0.3)]'
+          : 'bg-black/50 text-gray-500 border-white/10 hover:border-flame/30 hover:text-flame'"
+        @click="toggleDebug"
+        title="按 D 键切换调试面板"
+      >
+        {{ showDebug ? '🐛 ON' : '🐛 DEBUG' }}
+      </button>
+>>>>>>> e4bb34e2bbe399b6ab6a5d498c73f944eed06a8a
       <ControlBar
         :is-idle="training.isIdle.value"
         :is-paused="training.state.value === 'paused'"
@@ -65,6 +87,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import type { ScoreData, PoseContext } from './types'
+import { config } from './config'
 import { useCamera } from './composables/useCamera'
 import { useWebSocket } from './composables/useWebSocket'
 import { useTrainingState } from './composables/useTrainingState'
@@ -78,6 +101,11 @@ import AiCoach from './components/AiCoach.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import PlanPanel from './components/PlanPanel.vue'
 import JointHeatmap from './components/JointHeatmap.vue'
+<<<<<<< HEAD
+import PoseViewer from './components/PoseViewer.vue'
+=======
+import DebugOverlay from './components/DebugOverlay.vue'
+>>>>>>> e4bb34e2bbe399b6ab6a5d498c73f944eed06a8a
 
 const camera = useCamera()
 const ws = useWebSocket()
@@ -85,6 +113,35 @@ const training = useTrainingState()
 
 // Entry screen — shown on load, dismissed on click-to-enter
 const showEntry = ref(true)
+
+// Debug mode — toggle with 'D' key or button
+const showDebug = ref(false)
+
+function toggleDebug() {
+  showDebug.value = !showDebug.value
+}
+
+function onKeyDown(e: KeyboardEvent) {
+  // Only toggle when not typing in an input
+  if (e.key === 'd' || e.key === 'D') {
+    const tag = (e.target as HTMLElement)?.tagName
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+      toggleDebug()
+    }
+  }
+}
+
+onMounted(() => {
+  fetchExercises()
+  window.addEventListener('keydown', onKeyDown)
+})
+
+onUnmounted(() => {
+  stopFrameLoop()
+  camera.stop()
+  ws.disconnect()
+  window.removeEventListener('keydown', onKeyDown)
+})
 
 // Tab state
 const tabs = [
@@ -146,7 +203,7 @@ watch(() => ws.lastResult.value?.score?.total, (newTotal) => {
 // Fetch authoritative exercise list from backend
 async function fetchExercises() {
   try {
-    const res = await fetch('http://localhost:8000/api/exercises')
+    const res = await fetch(config.endpoints.exercises)
     if (!res.ok) return
     const data = await res.json()
     if (data.exercises && Array.isArray(data.exercises) && data.exercises.length > 0) {
@@ -160,7 +217,6 @@ async function fetchExercises() {
   }
 }
 
-onMounted(fetchExercises)
 
 function resetSessionStats() {
   bestScore.value = 0
@@ -170,7 +226,7 @@ function resetSessionStats() {
 // ---- Session lifecycle (for training history) ----
 async function beginSession() {
   try {
-    const res = await fetch('http://localhost:8000/api/session/start', {
+    const res = await fetch(config.endpoints.sessionStart, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ exercise: currentExercise.value }),
@@ -185,7 +241,7 @@ async function endSession() {
   if (!sessionId.value) return
   try {
     const duration = (Date.now() - sessionStartTime.value) / 1000
-    await fetch('http://localhost:8000/api/session/stop', {
+    await fetch(config.endpoints.sessionStop, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -265,9 +321,4 @@ function stopFrameLoop() {
   if (fpsTimer) clearInterval(fpsTimer)
 }
 
-onUnmounted(() => {
-  stopFrameLoop()
-  camera.stop()
-  ws.disconnect()
-})
 </script>

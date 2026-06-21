@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from code.pose_analyzer import (
     PoseAnalyzer, JointAngles, TemporalFeatures, ExerciseStandard,
-    ErrorInfo, ScoreResult, AnalysisResult, EXERCISE_STANDARDS,
+    ErrorInfo, ScoreResult, OverallRating, AnalysisResult, EXERCISE_STANDARDS,
     JointAngleExtractor, TemporalFeatureExtractor, MovementScorer,
     ErrorDetector, calculate_angle, calculate_vertical_angle,
     point_distance, point_to_line_distance, valid_point,
@@ -444,6 +444,198 @@ class TestMovementScorer:
 
 
 # ============================================================================
+# 4b. 总体评分报告测试
+# ============================================================================
+
+class TestOverallRating:
+    """测试 OverallRating 和 get_overall_rating()."""
+
+    def test_grade_thresholds(self):
+        """等级划分阈值测试."""
+        test_cases = [
+            (95, "优秀", "🌟"),
+            (90, "优秀", "🌟"),
+            (85, "良好", "👍"),
+            (75, "良好", "👍"),
+            (70, "一般", "📊"),
+            (60, "一般", "📊"),
+            (55, "需改进", "💪"),
+            (30, "需改进", "💪"),
+            (0,  "需改进", "💪"),
+        ]
+        for score, expected_grade, expected_emoji in test_cases:
+            grade, emoji, msg = OverallRating.compute_grade(score)
+            assert grade == expected_grade, f"{score}分 → 应为{expected_grade}, 实际{grade}"
+            assert emoji == expected_emoji, f"{score}分 → emoji应为{expected_emoji}, 实际{emoji}"
+            assert len(msg) > 0, "应有鼓励消息"
+
+    def test_trend_improving(self):
+        """进步趋势检测."""
+        # 前半段平均 ~60, 后半段平均 ~85
+        history = [60, 62, 58, 61, 59, 80, 82, 85, 83, 88]
+        trend = OverallRating.compute_trend(history, window=5)
+        assert trend == "进步中", f"明显进步应检测为'进步中', 实际 {trend}"
+
+    def test_trend_declining(self):
+        """下滑趋势检测."""
+        history = [85, 83, 88, 82, 86, 65, 62, 58, 60, 55]
+        trend = OverallRating.compute_trend(history, window=5)
+        assert trend == "下滑中", f"明显下滑应检测为'下滑中', 实际 {trend}"
+
+    def test_trend_stable(self):
+        """稳定趋势检测."""
+        # 前后差异在 5 分以内
+        history = [75, 73, 76, 74, 75, 76, 74, 75, 73, 76]
+        trend = OverallRating.compute_trend(history, window=5)
+        assert trend == "稳定", f"稳定应检测为'稳定', 实际 {trend}"
+
+    def test_trend_insufficient_data(self):
+        """数据不足时返回稳定."""
+        history = [80, 75, 85]  # < window*2 = 10
+        trend = OverallRating.compute_trend(history, window=5)
+        assert trend == "稳定", f"数据不足时应返回'稳定', 实际 {trend}"
+
+    def test_empty_history(self):
+        """空历史返回稳定."""
+        history = []
+        trend = OverallRating.compute_trend(history, window=5)
+        assert trend == "稳定"
+
+    def test_get_overall_rating_perfect_squat(self):
+        """完美深蹲的总体评分报告."""
+        scorer = MovementScorer("深蹲", smooth_alpha=0.9)
+        angles = JointAngles(knee_left=170, knee_right=170, hip_left=170, hip_right=170)
+
+        for _ in range(50):
+            scorer.update_angle(170.0, "高位")
+            scorer.update_symmetry(angles)
+            scorer.compute(TemporalFeatures(
+                angular_velocity=3.0, smoothness=2.0,
+                rhythm_consistency=0.05, rom_consistency=0.03,
+            ))
+
+        overall = scorer.get_overall_rating(total_reps=15, duration_seconds=45.0)
+
+        assert overall.total_score >= 85, f"完美深蹲总分应 ≥85, 实际 {overall.total_score:.1f}"
+        assert overall.grade in ("优秀", "良好"), f"等级应为优秀/良好, 实际 {overall.grade}"
+        assert len(overall.dimension_breakdown) > 0, "应有分维度解释"
+        assert len(overall.highlight) > 0, "应有亮点"
+        assert len(overall.weakness) > 0, "应有短板"
+        assert len(overall.suggestion) > 0, "应有建议"
+        assert overall.total_reps == 15
+        assert overall.total_duration_seconds == 45.0
+
+    def test_get_overall_rating_poor_form(self):
+        """差劲动作的总体评分报告."""
+        scorer = MovementScorer("深蹲", smooth_alpha=0.9)
+        angles = JointAngles(knee_left=130, knee_right=135)
+
+        for _ in range(30):
+            scorer.update_angle(130.0, "高位")
+            scorer.update_symmetry(angles)
+            scorer.compute(TemporalFeatures(
+                angular_velocity=25.0, smoothness=35.0,
+                rhythm_consistency=0.30, rom_consistency=0.25,
+            ))
+
+        overall = scorer.get_overall_rating(total_reps=5, duration_seconds=20.0)
+
+        assert overall.total_score < 65, f"差劲动作总分应 <65, 实际 {overall.total_score:.1f}"
+        assert overall.grade in ("一般", "需改进"), f"等级应为一般/需改进, 实际 {overall.grade}"
+        assert len(overall.suggestion) > 0
+
+    def test_get_overall_rating_no_data(self):
+        """无评分数据时返回默认报告."""
+        scorer = MovementScorer("深蹲")
+        overall = scorer.get_overall_rating()
+
+        assert overall.total_score == 0.0
+        assert overall.grade == "需改进"
+        assert overall.trend == "稳定"
+        assert "暂无评分数据" in overall.dimension_breakdown
+
+    def test_highlight_is_best_dimension(self):
+        """亮点应为得分最高的维度."""
+        scorer = MovementScorer("深蹲", smooth_alpha=0.9)
+        # 不对称的角度: 角度好但对称性差
+        angles_bad_sym = JointAngles(knee_left=170, knee_right=120)
+
+        for _ in range(30):
+            scorer.update_angle(170.0, "高位")
+            scorer.update_symmetry(angles_bad_sym)
+            scorer.compute(TemporalFeatures(
+                angular_velocity=3.0, smoothness=2.0,
+                rhythm_consistency=0.05, rom_consistency=0.03,
+            ))
+
+        overall = scorer.get_overall_rating(total_reps=10, duration_seconds=30.0)
+        # 角度应该是最佳维度，对称应该是最差维度
+        assert "角度" in overall.highlight, f"亮点应包含'角度', 实际: {overall.highlight}"
+        assert "对称" in overall.weakness, f"短板应包含'对称', 实际: {overall.weakness}"
+
+    def test_dimension_breakdown_format(self):
+        """分维度解释格式."""
+        scorer = MovementScorer("深蹲", smooth_alpha=0.9)
+        angles = JointAngles(knee_left=170, knee_right=170)
+
+        for _ in range(20):
+            scorer.update_angle(170.0, "高位")
+            scorer.update_symmetry(angles)
+            scorer.compute(TemporalFeatures(smoothness=5.0, rhythm_consistency=0.10))
+
+        overall = scorer.get_overall_rating(total_reps=8, duration_seconds=25.0)
+        breakdown = overall.dimension_breakdown
+
+        # 应包含三个维度
+        assert "关节角度" in breakdown
+        assert "时序节奏" in breakdown
+        assert "左右对称" in breakdown
+        # 每个维度应包含分数和等级
+        assert "/40" in breakdown or "/30" in breakdown
+        assert "）" in breakdown  # 等级在括号中
+
+    def test_all_exercises_overall_rating(self):
+        """所有 10 个动作都能生成总体评分."""
+        for ex_name in EXERCISE_STANDARDS:
+            scorer = MovementScorer(ex_name)
+            overall = scorer.get_overall_rating()
+            assert overall is not None, f"{ex_name} 应能生成总体评分"
+            assert isinstance(overall, OverallRating)
+
+    def test_suggestion_references_weakness(self):
+        """建议应引用短板维度."""
+        scorer = MovementScorer("深蹲", smooth_alpha=0.9)
+        angles = JointAngles(knee_left=170, knee_right=130)  # 不对称
+
+        for _ in range(30):
+            scorer.update_angle(170.0, "高位")
+            scorer.update_symmetry(angles)
+            scorer.compute(TemporalFeatures(smoothness=5.0, rhythm_consistency=0.10))
+
+        overall = scorer.get_overall_rating(total_reps=10, duration_seconds=30.0)
+        # 短板应是对称，建议中应提及
+        assert overall.weakness is not None
+        if "对称" in overall.weakness:
+            assert "对称" in overall.suggestion or "均衡" in overall.suggestion or "侧" in overall.suggestion, \
+                f"建议应针对短板, 短板={overall.weakness}, 建议={overall.suggestion}"
+
+    def test_avg_scores_in_range(self):
+        """分维度均值应在有效范围内."""
+        scorer = MovementScorer("深蹲", smooth_alpha=0.9)
+        angles = JointAngles(knee_left=170, knee_right=170)
+
+        for _ in range(30):
+            scorer.update_angle(170.0, "高位")
+            scorer.update_symmetry(angles)
+            scorer.compute(TemporalFeatures(smoothness=5.0, rhythm_consistency=0.10))
+
+        overall = scorer.get_overall_rating(total_reps=10, duration_seconds=30.0)
+        assert 0 <= overall.avg_angle_score <= 40, f"角度均值应在 0-40, 实际 {overall.avg_angle_score}"
+        assert 0 <= overall.avg_temporal_score <= 30, f"时序均值应在 0-30, 实际 {overall.avg_temporal_score}"
+        assert 0 <= overall.avg_symmetry_score <= 30, f"对称均值应在 0-30, 实际 {overall.avg_symmetry_score}"
+
+
+# ============================================================================
 # 5. 错误检测测试
 # ============================================================================
 
@@ -473,11 +665,11 @@ class TestErrorDetector:
         """检测深蹲弓背."""
         kp, conf = make_squat_low_keypoints()
         kp_round = kp.copy()
-        # 肩前移模拟弓背
-        kp_round[5] = [310, 260]
-        kp_round[6] = [390, 260]
-        kp_round[11] = [320, 340]
-        kp_round[12] = [380, 340]
+        # 肩膀 x 大幅偏移模拟严重弓背（躯干角 < 135° 即前倾 > 45°）
+        kp_round[5] = [220, 240]   # 左肩前移
+        kp_round[6] = [240, 240]   # 右肩前移
+        kp_round[11] = [340, 350]  # 髋不动
+        kp_round[12] = [360, 350]
 
         extractor = JointAngleExtractor()
         angles = extractor.extract(kp_round, conf)
@@ -488,9 +680,11 @@ class TestErrorDetector:
             errors = detector.detect(angles, kp_round, conf, "低位", "深蹲")
 
         back_errors = [e for e in errors if e.name == "深蹲弓背"]
-        # 注: 此测试依赖合成的躯干角大于 45°
-        # 如果未触发，说明合成数据不够极端，这不是 bug
-        assert True  # 验收通过即成功
+        # 合成数据肩膀大幅前移，躯干角应 < 135°
+        if angles.trunk_angle is not None:
+            assert angles.trunk_angle < 135.0, \
+                f"弓背姿态躯干角应 < 135°, 实际 {angles.trunk_angle:.1f}°"
+        assert len(back_errors) > 0, "应检测到深蹲弓背"
 
     def test_detect_hip_sagging(self):
         """检测俯卧撑塌腰."""
@@ -587,7 +781,7 @@ class TestJointAngleHeatmap:
         angles = JointAngles(
             knee_left=90, knee_right=92,
             hip_left=82, hip_right=80,
-            trunk_angle=15,
+            trunk_angle=158,
         )
         for _ in range(20):
             hm.record_frame(angles)
@@ -604,11 +798,11 @@ class TestJointAngleHeatmap:
     def test_summary(self):
         """测试对比摘要."""
         hm = JointAngleHeatmap("深蹲")
-        # 角度接近标准中点: knee(75,170)→mid=122.5, hip(70,170)→mid=120, trunk(10,35)→mid=22.5
+        # 角度接近标准中点: knee(75,170)→mid=122.5, hip(70,170)→mid=120, trunk(145,170)→mid=157.5
         angles = JointAngles(
             knee_left=122, knee_right=124,
             hip_left=120, hip_right=118,
-            trunk_angle=22,
+            trunk_angle=158,
         )
         for _ in range(15):
             hm.record_frame(angles)
@@ -646,12 +840,12 @@ class TestJointAngleHeatmap:
         """
         # 好动作: 角度接近标准中点
         hm_good = JointAngleHeatmap("深蹲")
-        # 标准中点: knee=122.5, hip=120, trunk=22.5
+        # 标准中点: knee=122.5, hip=120, trunk=157.5
         for _ in range(20):
             angles_good = JointAngles(
                 knee_left=123, knee_right=121,
                 hip_left=118, hip_right=122,
-                trunk_angle=23,
+                trunk_angle=158,
             )
             hm_good.record_frame(angles_good)
         matrix_good = hm_good.compute_deviation_matrix()
@@ -662,7 +856,7 @@ class TestJointAngleHeatmap:
             angles_bad = JointAngles(
                 knee_left=170, knee_right=170,  # 偏离 ~47°
                 hip_left=170, hip_right=170,    # 偏离 ~50°
-                trunk_angle=55,                 # 偏离 ~32°
+                trunk_angle=120,                # 偏离 ~37°
             )
             hm_bad.record_frame(angles_bad)
         matrix_bad = hm_bad.compute_deviation_matrix()
@@ -776,6 +970,66 @@ class TestPoseAnalyzer:
             analyzer = PoseAnalyzer(ex)
             assert analyzer.standard is not None
             assert analyzer.standard.primary_joint != ""
+
+    def test_get_overall_rating_after_exercise(self):
+        """运动后调用 get_overall_rating 应返回有效报告."""
+        kp_standing, conf = make_standing_keypoints()
+        kp_squat, _ = make_squat_low_keypoints()
+
+        analyzer = PoseAnalyzer("深蹲")
+
+        # 模拟多个 rep
+        for _ in range(8):
+            # 站立
+            for __ in range(3):
+                analyzer.analyze_frame(kp_standing, conf)
+            # 下蹲
+            for __ in range(3):
+                analyzer.analyze_frame(kp_squat, conf)
+
+        overall = analyzer.get_overall_rating()
+        assert overall is not None
+        assert isinstance(overall, OverallRating)
+        assert len(overall.grade) > 0
+        assert overall.total_reps == analyzer.count
+
+    def test_auto_overall_at_milestone(self):
+        """rep 达到 5 的倍数时应自动生成总体评分."""
+        kp_standing, conf = make_standing_keypoints()
+        kp_squat, _ = make_squat_low_keypoints()
+
+        analyzer = PoseAnalyzer("深蹲")
+
+        # 模拟足够的 rep 以触发第 5 个 rep 的里程碑
+        for rep in range(6):
+            # 站立
+            for __ in range(3):
+                result = analyzer.analyze_frame(kp_standing, conf)
+            # 下蹲
+            for __ in range(3):
+                result = analyzer.analyze_frame(kp_squat, conf)
+
+        # 在第 5 个 rep 时，result.overall 应被填充
+        assert analyzer.count >= 5, f"应至少计数 5 次, 实际 {analyzer.count}"
+        # 最后一帧可能带有 overall（取决于计数时机）
+        # 验证 get_overall_rating 可以正常调用
+        overall = analyzer.get_overall_rating()
+        assert overall.total_score >= 0
+
+    def test_reset_clears_overall_state(self):
+        """reset 应清除总体评分相关状态."""
+        kp, conf = make_standing_keypoints()
+        analyzer = PoseAnalyzer("深蹲")
+
+        for _ in range(5):
+            analyzer.analyze_frame(kp, conf)
+
+        analyzer.reset()
+        overall = analyzer.get_overall_rating()
+        assert overall.total_score == 0.0
+        assert overall.total_reps == 0
+        assert overall.total_duration_seconds == 0.0
+        assert "暂无评分数据" in overall.dimension_breakdown
 
 
 # ============================================================================

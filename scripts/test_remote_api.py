@@ -88,7 +88,7 @@ def main():
     if args.multi_turn:
         print("多轮对话模式 (输入 /quit 退出)\n")
         client = OpenAI(api_key=api_key, base_url=DASHSCOPE_BASE_URL)
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}] #messages是一个列表，包含系统提示和用户输入的消息
         while True:
             try:
                 user_input = input("You: ").strip()
@@ -101,7 +101,10 @@ def main():
                 print("再见！")
                 break
 
-            messages.append({"role": "user", "content": user_input})
+            messages.append({"role": "user", "content": user_input}) # 用户输入
+            print("AI: ", end="", flush=True)
+
+            completion = client.chat.completions.create(...)
             print("AI: ", end="", flush=True)
 
             completion = client.chat.completions.create(

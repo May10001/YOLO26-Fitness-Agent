@@ -25,6 +25,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
 import type { PoseContext, CoachMessage } from '../types'
+import { config } from '../config'
 
 const props = defineProps<{
   poseContext?: PoseContext
@@ -62,7 +63,7 @@ async function send() {
   }
 
   try {
-    const res = await fetch('http://localhost:8000/api/chat', {
+    const res = await fetch(config.endpoints.chat, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

@@ -11,22 +11,22 @@
     </div>
     <div class="grid grid-cols-3 gap-1.5">
       <div v-if="isHoldExercise"
-           class="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
-        <div class="text-base font-bold">{{ formattedHoldTime }}</div>
-        <div class="text-[8px] text-gray-500">保持时长</div>
+           class="bg-white/[0.03] rounded-lg p-2.5 text-center border border-white/[0.04]">
+        <div class="text-2xl font-extrabold text-white">{{ formattedHoldTime }}</div>
+        <div class="text-[9px] text-gray-500 mt-0.5">保持时长</div>
       </div>
       <div v-else
-           class="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
-        <div class="text-base font-bold">{{ count }}</div>
-        <div class="text-[8px] text-gray-500">总次数</div>
+           class="bg-white/[0.03] rounded-lg p-2.5 text-center border border-white/[0.04]">
+        <div class="text-2xl font-extrabold text-white">{{ count }}</div>
+        <div class="text-[9px] text-gray-500 mt-0.5">总次数</div>
       </div>
-      <div class="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
-        <div class="text-base font-bold">{{ formattedTime }}</div>
-        <div class="text-[8px] text-gray-500">训练时长</div>
+      <div class="bg-white/[0.03] rounded-lg p-2.5 text-center border border-white/[0.04]">
+        <div class="text-2xl font-extrabold text-white">{{ formattedTime }}</div>
+        <div class="text-[9px] text-gray-500 mt-0.5">训练时长</div>
       </div>
-      <div class="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
-        <div class="text-base font-bold text-danger">{{ errorCount }}</div>
-        <div class="text-[8px] text-gray-500">错误次数</div>
+      <div class="bg-white/[0.03] rounded-lg p-2.5 text-center border border-white/[0.04]">
+        <div class="text-2xl font-extrabold text-danger">{{ errorCount }}</div>
+        <div class="text-[9px] text-gray-500 mt-0.5">错误次数</div>
       </div>
     </div>
   </div>

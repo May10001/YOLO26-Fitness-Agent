@@ -1,61 +1,59 @@
 <template>
-  <div class="rounded-2xl overflow-hidden relative transition-all duration-700 h-full" :class="glowClass">
-    <video ref="videoEl" class="w-full h-full object-cover" muted playsinline />
-<<<<<<< HEAD
-
-=======
-    <SkeletonOverlay
-      v-if="result?.keypoints"
-      :keypoints="result.keypoints"
-      :errors="result.errors || []"
-      :video-width="640"
-      :video-height="480"
-    />
+  <div class="rounded-2xl overflow-hidden relative transition-all duration-700" :class="glowClass">
+    <video ref="videoEl" class="absolute inset-0 w-full h-full object-cover" muted playsinline />
     <DebugOverlay
       v-if="showDebug && result?.debug"
       :debug="result.debug"
       :score="score"
       :phase="result?.phase || ''"
     />
->>>>>>> e4bb34e2bbe399b6ab6a5d498c73f944eed06a8a
-    <GaugeBar direction="left" :value="score.angle" :max="40" />
-    <GaugeBar direction="right" :value="score.symmetry" :max="30" />
-    <GaugeBar direction="bottom" :value="score.temporal" :max="30" />
 
-    <!-- Gauge labels -->
-    <div class="absolute left-[26px] top-[38px] text-[10px] font-semibold text-flame">角度 <span class="text-gray-500 text-[9px]">{{ score.angle.toFixed(0) }}/40</span></div>
-    <div class="absolute right-[26px] top-[38px] text-[10px] font-semibold text-rose text-right">对称 <span class="text-gray-500 text-[9px]">{{ score.symmetry.toFixed(0) }}/30</span></div>
-    <div class="absolute left-[30px] bottom-[26px] text-[10px] font-semibold text-flame">时序 <span class="text-gray-500 text-[9px]">{{ score.temporal.toFixed(0) }}/30</span></div>
-
-    <!-- HUD top -->
+    <!-- HUD top bar -->
     <div class="absolute top-3.5 left-7 flex gap-2 items-center">
       <span v-if="isRunning" class="px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-gradient-to-r from-flame to-rose shadow-[0_0_12px_rgba(255,106,0,0.4)]">REC</span>
       <span class="px-2.5 py-1 rounded-full text-[10px] text-gray-300 bg-black/60 backdrop-blur border border-white/10">{{ exercise }}</span>
       <span v-if="result?.phase" class="px-2.5 py-1 rounded-full text-[10px] text-emerald-400 bg-black/60 backdrop-blur border border-emerald-500/30">{{ result.phase }}</span>
     </div>
 
-    <!-- HUD bottom-left: rep count / hold time -->
-    <div class="absolute bottom-[46px] left-7 flex gap-1.5">
-      <span v-if="isHoldExercise" class="px-2.5 py-1 rounded-lg text-[10px] text-gray-400 bg-black/60 backdrop-blur border border-white/5">保持 <b class="text-flame">{{ formattedHoldTime }}</b></span>
-      <span v-else class="px-2.5 py-1 rounded-lg text-[10px] text-gray-400 bg-black/60 backdrop-blur border border-white/5">次数 <b class="text-flame">{{ result?.count || 0 }}</b></span>
-      <span class="px-2.5 py-1 rounded-lg text-[10px] text-gray-400 bg-black/60 backdrop-blur border border-white/5">时长 <b class="text-flame">{{ formattedTime }}</b></span>
-      <span class="px-2.5 py-1 rounded-lg text-[10px] text-gray-400 bg-black/60 backdrop-blur border border-white/5">FPS <b class="text-flame">{{ fps }}</b></span>
-    </div>
-
-    <!-- HUD bottom-right score -->
-    <div class="absolute bottom-7 right-7 bg-black/75 backdrop-blur-lg border border-flame/25 rounded-xl px-4 py-2 text-center">
-      <div class="text-3xl font-extrabold gradient-text leading-none">{{ score.total.toFixed(0) }}</div>
-      <div class="text-[9px] text-gray-500 mt-0.5">TOTAL</div>
-    </div>
-
-    <!-- Guidance hint banner -->
+    <!-- Center: guidance banner (large, color-coded) -->
     <div v-if="guidance && isRunning"
-         class="absolute top-14 left-1/2 -translate-x-1/2 z-30 transition-all duration-300"
-         :class="guidancePillClass">
-      <div class="flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-semibold shadow-lg">
-        <span class="text-[10px] opacity-70">{{ guidanceTypeLabel }}</span>
-        <span>{{ guidance.text }}</span>
+         class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 transition-all duration-300 max-w-[85%]"
+         :class="guidanceBannerClass">
+      <div class="flex flex-col items-center gap-1 px-6 py-4 rounded-2xl shadow-2xl text-center"
+           :class="guidanceBannerInner">
+        <span class="text-[10px] uppercase tracking-widest opacity-80">{{ guidanceTypeLabel }}</span>
+        <span class="text-lg font-extrabold leading-tight">{{ guidance.text }}</span>
       </div>
+    </div>
+
+    <!-- Bottom: big rep counter -->
+    <div v-if="isRunning && !isHoldExercise" class="absolute bottom-20 left-1/2 -translate-x-1/2 text-center z-10">
+      <div class="text-6xl font-extrabold gradient-text leading-none tabular-nums">
+        {{ result?.count || 0 }}<span v-if="targetReps > 0" class="text-2xl text-gray-600"> / {{ targetReps }}</span>
+      </div>
+      <div class="text-[10px] text-gray-500 uppercase tracking-[4px] mt-1">REPS</div>
+    </div>
+
+    <!-- Bottom: hold time for static exercises -->
+    <div v-if="isRunning && isHoldExercise" class="absolute bottom-20 left-1/2 -translate-x-1/2 text-center z-10">
+      <div class="text-6xl font-extrabold gradient-text leading-none tabular-nums">{{ formattedHoldTime }}</div>
+      <div class="text-[10px] text-gray-500 uppercase tracking-[4px] mt-1">HOLD</div>
+    </div>
+
+    <!-- Bottom-right: big total score -->
+    <div class="absolute bottom-6 right-6 bg-black/80 backdrop-blur-lg border border-flame/30 rounded-2xl px-5 py-3 text-center z-10">
+      <div class="text-6xl font-extrabold gradient-text leading-none">{{ score.total.toFixed(0) }}</div>
+      <div class="text-[9px] text-gray-500 mt-1 uppercase tracking-[3px]">Total Score</div>
+    </div>
+
+    <!-- Bottom-left: meta info (time, FPS) -->
+    <div class="absolute bottom-6 left-6 flex gap-2 z-10">
+      <span class="px-2.5 py-1.5 rounded-lg text-[11px] text-gray-400 bg-black/60 backdrop-blur border border-white/5">
+        {{ formattedTime }}
+      </span>
+      <span class="px-2.5 py-1.5 rounded-lg text-[11px] text-gray-500 bg-black/60 backdrop-blur border border-white/5">
+        {{ fps }} FPS
+      </span>
     </div>
 
     <!-- No person detected overlay -->
@@ -68,8 +66,11 @@
     </div>
 
     <!-- Ready overlay -->
-    <div v-if="!isRunning" class="absolute top-1/2 left-1/2 animate-breathe text-[11px] text-flame uppercase tracking-[3px] px-7 py-3 border border-flame/30 rounded-full bg-black/70 backdrop-blur">
-      READY — 点击开始训练
+    <div v-if="!isRunning" class="absolute inset-0 flex items-center justify-center bg-black/40">
+      <div class="text-center">
+        <div class="text-sm text-flame uppercase tracking-[4px] font-bold animate-breathe mb-2">READY</div>
+        <div class="text-[10px] text-gray-500">点击下方开始训练</div>
+      </div>
     </div>
   </div>
 </template>
@@ -77,12 +78,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { DetectionResult, ScoreData, GuidanceData, DebugData } from '../types'
-import GaugeBar from './GaugeBar.vue'
-<<<<<<< HEAD
-=======
-import SkeletonOverlay from './SkeletonOverlay.vue'
 import DebugOverlay from './DebugOverlay.vue'
->>>>>>> e4bb34e2bbe399b6ab6a5d498c73f944eed06a8a
 
 const props = defineProps<{
   result: DetectionResult | null
@@ -93,6 +89,7 @@ const props = defineProps<{
   fps: number
   stream: MediaStream | null
   showDebug?: boolean
+  targetReps?: number
 }>()
 
 const videoEl = ref<HTMLVideoElement | null>(null)
@@ -124,27 +121,32 @@ const formattedHoldTime = computed(() => {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 })
 
-// ---- Guidance banner styling ----
+// ---- Guidance banner: red for errors, green for good ----
 const guidanceTypeLabel = computed(() => {
   const labels: Record<string, string> = {
-    form_correction: '纠正',
-    performance: '表现',
-    motivation: '鼓励',
-    safety: '安全',
+    form_correction: '动作纠正',
+    performance: '表现反馈',
+    motivation: '继续加油',
+    safety: '安全警告',
   }
   return labels[props.guidance?.type ?? ''] ?? ''
 })
 
-const guidancePillClass = computed(() => {
-  const prio = props.guidance?.priority ?? 0
+const isNegativeGuidance = computed(() => {
   const type = props.guidance?.type ?? ''
+  const prio = props.guidance?.priority ?? 0
+  return type === 'form_correction' || type === 'safety' || prio >= 3
+})
 
-  if (type === 'safety' || prio >= 4) {
-    return 'bg-danger/80 text-white border border-danger shadow-[0_0_20px_rgba(255,77,77,0.5)]'
-  }
-  if (prio >= 3) {
-    return 'bg-flame/80 text-white border border-flame shadow-[0_0_20px_rgba(255,106,0,0.5)]'
-  }
-  return 'bg-black/70 backdrop-blur text-flame border border-flame/30'
+const guidanceBannerClass = computed(() => {
+  return isNegativeGuidance.value
+    ? 'animate-[pulse_0.6s_ease-in-out]'
+    : ''
+})
+
+const guidanceBannerInner = computed(() => {
+  return isNegativeGuidance.value
+    ? 'bg-red-600/85 text-white border border-red-400/40 shadow-[0_0_40px_rgba(220,38,38,0.5)]'
+    : 'bg-emerald-500/85 text-white border border-emerald-300/40 shadow-[0_0_40px_rgba(16,185,129,0.5)]'
 })
 </script>

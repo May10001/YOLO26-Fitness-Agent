@@ -1,6 +1,6 @@
 <template>
   <div
-    class="rounded-2xl overflow-hidden relative bg-[#0a0a0a] border transition-all duration-700 min-h-[200px]"
+    class="rounded-2xl overflow-hidden relative bg-[#0a0a0a] border transition-all duration-700"
     :class="panelGlow"
   >
     <!-- Reference grid -->

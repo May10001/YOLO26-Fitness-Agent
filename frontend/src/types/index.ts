@@ -136,3 +136,23 @@ export interface WeeklyPlan {
   week_start: string
   days: DailyPlan[]
 }
+
+/** Error summary entry for training summary panel. */
+export interface ErrorSummary {
+  name: string
+  count: number
+  severity: number
+  suggestion: string
+}
+
+/** Data for the post-set training summary panel. */
+export interface SummaryData {
+  exercise: string
+  totalReps: number
+  targetReps: number
+  bestScore: number
+  avgScore: number
+  duration: string
+  errors: ErrorSummary[]
+  finalScore: ScoreData
+}

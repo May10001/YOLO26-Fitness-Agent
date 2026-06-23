@@ -12,7 +12,7 @@ from typing import TypedDict
 
 class CoachAgentState(TypedDict, total=False):
     """State flowing through the coaching LangGraph pipeline.
-    是一种固定格式的状态字典，用于在LangGraph管道中传递数据。
+
     Input fields (set by caller before graph invocation):
         exercise_name:      Chinese exercise name (e.g. "深蹲")
         score:              {total, angle, temporal, symmetry} from ScoreResult
@@ -29,13 +29,19 @@ class CoachAgentState(TypedDict, total=False):
         chat_mode:          "proactive" or "reactive"
         user_message:       User's chat message (reactive mode only)
         api_config:         {use_remote, api_key, model_code} from api_config.json
+        scorer_data:        Diagnostic data from MovementScorer.get_diagnostic_data()
+        cue_history:        Historical cue records [{cue, tier, focus, target_error, ...}]
+        cue_effectiveness:  {error_name: {last_cue, effective, tried_cues}}
 
     Intermediate fields (populated by graph nodes):
         system_prompt:      Selected COACH_SYSTEM_PROMPT variant
         context_prompt:     Formatted COACH_CONTEXT_TEMPLATE string
 
     Output fields (populated by graph nodes):
-        response:           LLM response text
+        response:           LLM response text (user-facing guidance, backward compat)
+        diagnosis_json:     Parsed diagnosis JSON from LLM output
+        guidance_text:      User-facing guidance text (explicit naming)
+        recommended_cues:   [{cue, tier, focus}] extracted from diagnosis
         error:              Error message if any node fails
     """
 
@@ -58,21 +64,30 @@ class CoachAgentState(TypedDict, total=False):
     user_message: str
     api_config: dict
 
+    # --- Input: diagnostic data (Phase 1/2) ---
+    scorer_data: dict               # From MovementScorer.get_diagnostic_data()
+    cue_history: list[dict]         # Historical cue records
+    cue_effectiveness: dict         # {error_name: {last_cue, effective, tried_cues}}
+
     # --- Intermediate ---
     system_prompt: str
     context_prompt: str
 
     # --- Output ---
-    response: str
+    response: str                   # Backward-compat: user-facing guidance text
+    diagnosis_json: dict            # LLM diagnostic output (Phase 3)
+    guidance_text: str              # Explicit guidance text (Phase 3)
+    recommended_cues: list[dict]    # [{cue, tier, focus}] (Phase 3)
     error: str
 
 
 def state_from_analysis(analysis_result, guidance_state, exercise_name: str,
                         chat_mode: str = "proactive", user_message: str = "",
-                        api_config: dict | None = None) -> CoachAgentState:
+                        api_config: dict | None = None,
+                        scorer_data: dict | None = None,
+                        cue_effectiveness: dict | None = None) -> CoachAgentState:
     """Build CoachAgentState from existing AnalysisResult + GuidanceState objects.
-    这是LangGraph管道的主要桥梁，它将数据类实例序列化为类型化字典格式。这是LangGraph节点期望的格式。
-    This is the primary bridge between the existing scoring pipeline and the
+
     This is the primary bridge between the existing scoring pipeline and the
     LangGraph agent. It serializes dataclass instances into the typed dict
     format expected by the graph nodes.
@@ -84,6 +99,8 @@ def state_from_analysis(analysis_result, guidance_state, exercise_name: str,
         chat_mode: "proactive" for auto-push, "reactive" for user-initiated
         user_message: User's chat text (only for reactive mode)
         api_config: Remote API config dict (loaded from api_config.json)
+        scorer_data: Optional diagnostic data from MovementScorer.get_diagnostic_data()
+        cue_effectiveness: Optional cue tracking feedback dict
 
     Returns:
         CoachAgentState ready for graph invocation
@@ -136,9 +153,15 @@ def state_from_analysis(analysis_result, guidance_state, exercise_name: str,
         "chat_mode": chat_mode,
         "user_message": user_message,
         "api_config": api_config or {},
+        "scorer_data": scorer_data or {},
+        "cue_history": list(getattr(gs, "cue_history", [])),
+        "cue_effectiveness": cue_effectiveness or {},
         "system_prompt": "",
         "context_prompt": "",
         "response": "",
+        "diagnosis_json": {},
+        "guidance_text": "",
+        "recommended_cues": [],
         "error": "",
     }
     return state

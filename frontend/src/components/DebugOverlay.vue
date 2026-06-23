@@ -178,7 +178,7 @@ const tuning = reactive<ScoringConfig>({
   target_low: 90,
   target_high: 170,
   symmetry_max_diff: 25,
-  angle_tolerance: 15,
+  angle_tolerance: 12.5,
   smooth_alpha: 0.7,
 })
 

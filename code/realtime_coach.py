@@ -61,8 +61,18 @@ class CoachContextBuilder:
 
     @classmethod
     def build_proactive(cls, analysis: AnalysisResult, state,
-                        exercise_name: str) -> str:
-        """Build a full structured context for proactive coaching."""
+                        exercise_name: str,
+                        scorer_data: Optional[dict] = None,
+                        cue_effectiveness: Optional[dict] = None) -> str:
+        """Build a full structured context for proactive coaching.
+
+        Args:
+            analysis: Per-frame AnalysisResult.
+            state: GuidanceState with accumulated session data.
+            exercise_name: Chinese exercise name.
+            scorer_data: Optional dict from MovementScorer.get_diagnostic_data().
+            cue_effectiveness: Optional cue tracking feedback dict.
+        """
         s = analysis.score
         a = analysis.angles
         exercise_en = cls.EXERCISE_ENGLISH.get(exercise_name, exercise_name)
@@ -77,6 +87,17 @@ class CoachContextBuilder:
         recent = state.recent_scores[-10:] if hasattr(state, 'recent_scores') else []
         avg_score = round(sum(recent) / max(1, len(recent)), 1) if recent else 0
 
+        # Build diagnostic, biomechanics, and cue-effectiveness blocks
+        diagnostic_block = cls._build_diagnostic_block(
+            analysis, scorer_data, exercise_name
+        )
+        biomechanics_block = cls._build_biomechanics_block(
+            analysis, exercise_name
+        )
+        cue_effectiveness_block = cls._build_cue_effectiveness_block(
+            cue_effectiveness
+        )
+
         return COACH_CONTEXT_TEMPLATE.format(
             exercise_cn=exercise_name,
             exercise_en=exercise_en,
@@ -90,22 +111,29 @@ class CoachContextBuilder:
             best_score=f"{state.best_score:.0f}",
             avg_score=f"{avg_score:.0f}",
             errors_block=errors_block,
-            knee_l=cls._fmt_angle(a.knee_left),
-            knee_r=cls._fmt_angle(a.knee_right),
-            hip_l=cls._fmt_angle(a.hip_left),
-            hip_r=cls._fmt_angle(a.hip_right),
-            elbow_l=cls._fmt_angle(a.elbow_left),
-            elbow_r=cls._fmt_angle(a.elbow_right),
-            trunk=cls._fmt_angle(a.trunk_angle),
+            diagnostic_block=diagnostic_block,
             consecutive_good=state.consecutive_good_form,
             consecutive_bad=state.consecutive_bad_form,
             error_ranking=error_ranking,
+            biomechanics_block=biomechanics_block,
+            cue_effectiveness_block=cue_effectiveness_block,
         )
 
     @classmethod
     def build_reactive(cls, analysis: Optional[AnalysisResult], state,
-                       exercise_name: str, user_message: str) -> str:
-        """Build a context string for reactive (user-initiated) chat."""
+                       exercise_name: str, user_message: str,
+                       scorer_data: Optional[dict] = None,
+                       cue_effectiveness: Optional[dict] = None) -> str:
+        """Build a context string for reactive (user-initiated) chat.
+
+        Args:
+            analysis: Per-frame AnalysisResult (can be None).
+            state: GuidanceState with accumulated session data.
+            exercise_name: Chinese exercise name.
+            user_message: The user's chat message.
+            scorer_data: Optional dict from MovementScorer.get_diagnostic_data().
+            cue_effectiveness: Optional cue tracking feedback dict.
+        """
         if analysis is None:
             return user_message
 
@@ -117,12 +145,25 @@ class CoachContextBuilder:
         else:
             errors_summary = "当前无检测错误"
 
+        diagnostic_block = cls._build_diagnostic_block(
+            analysis, scorer_data, exercise_name
+        )
+        biomechanics_block = cls._build_biomechanics_block(
+            analysis, exercise_name
+        )
+        cue_effectiveness_block = cls._build_cue_effectiveness_block(
+            cue_effectiveness
+        )
+
         return COACH_REACTIVE_TEMPLATE.format(
             exercise_cn=exercise_name,
             reps=analysis.count,
             total=f"{s.total:.0f}",
             best_score=f"{state.best_score:.0f}",
             errors_summary=errors_summary,
+            diagnostic_block=diagnostic_block,
+            biomechanics_block=biomechanics_block,
+            cue_effectiveness_block=cue_effectiveness_block,
             user_message=user_message,
         )
 
@@ -143,6 +184,113 @@ class CoachContextBuilder:
             return "暂无"
         sorted_errors = sorted(ec.items(), key=lambda x: x[1], reverse=True)
         return "、".join(f"{name}({count}次)" for name, count in sorted_errors[:5])
+
+    @classmethod
+    def _build_diagnostic_block(cls, analysis, scorer_data, exercise_name: str) -> str:
+        """Build the diagnostic block (joint deviations + trends + dimension diagnosis).
+
+        Returns empty string if scorer_data is not available.
+        """
+        if scorer_data is None:
+            # Fallback: show raw angles as before
+            a = analysis.angles
+            return (
+                "【关节角度数据】\n"
+                f"左膝/右膝：{cls._fmt_angle(a.knee_left)}°/{cls._fmt_angle(a.knee_right)}° | "
+                f"左髋/右髋：{cls._fmt_angle(a.hip_left)}°/{cls._fmt_angle(a.hip_right)}°\n"
+                f"左肘/右肘：{cls._fmt_angle(a.elbow_left)}°/{cls._fmt_angle(a.elbow_right)}° | "
+                f"躯干倾角：{cls._fmt_angle(a.trunk_angle)}°\n"
+            )
+
+        try:
+            from .coaching.diagnostic_context import DiagnosticContextBuilder
+            snapshot = DiagnosticContextBuilder.build(analysis, scorer_data, exercise_name)
+            return DiagnosticContextBuilder.format_for_llm(snapshot)
+        except ImportError:
+            # Graceful fallback if coaching module not available
+            a = analysis.angles
+            return (
+                "【关节角度数据】\n"
+                f"左膝/右膝：{cls._fmt_angle(a.knee_left)}°/{cls._fmt_angle(a.knee_right)}° | "
+                f"左髋/右髋：{cls._fmt_angle(a.hip_left)}°/{cls._fmt_angle(a.hip_right)}°\n"
+                f"左肘/右肘：{cls._fmt_angle(a.elbow_left)}°/{cls._fmt_angle(a.elbow_right)}° | "
+                f"躯干倾角：{cls._fmt_angle(a.trunk_angle)}°\n"
+            )
+
+    @classmethod
+    def _build_biomechanics_block(cls, analysis, exercise_name: str) -> str:
+        """Build the biomechanical knowledge injection block.
+
+        Only includes knowledge for currently detected errors.
+        Returns empty string if no errors or KB unavailable.
+        """
+        if not analysis.errors:
+            return ""
+
+        try:
+            from .biomechanics.knowledge_base import format_biomechanics_for_prompt
+            error_names = [e.name for e in analysis.errors]
+            bio = format_biomechanics_for_prompt(exercise_name, error_names)
+            if not bio:
+                return ""
+            # Format the biomechanics dict as text
+            return cls._format_biomechanics_text(bio)
+        except ImportError:
+            return ""
+
+    @staticmethod
+    def _format_biomechanics_text(biomechanics: dict) -> str:
+        """Format biomechanics dict as text for LLM context injection."""
+        lines = ["【生物力学知识】"]
+        for error_name, kb in biomechanics.items():
+            lines.append(f"\n◆ {error_name}:")
+            chains = kb.get("root_cause_chain", [])
+            if chains:
+                lines.append("  根因链:")
+                for i, chain in enumerate(chains, 1):
+                    lines.append(f"    {i}. {chain}")
+            cues = kb.get("correction_cues", {})
+            tier1 = cues.get("tier1_external", [])
+            if tier1:
+                lines.append("  首选纠正 cue (Tier 1 外部注意力):")
+                for c in tier1[:2]:
+                    cue_text = c.get("cue", str(c))
+                    lines.append(f"    • {cue_text}")
+            tier2 = cues.get("tier2_internal", [])
+            if tier2:
+                lines.append("  备选纠正 cue (Tier 2 内部注意力):")
+                for c in tier2[:1]:
+                    cue_text = c.get("cue", str(c))
+                    lines.append(f"    • {cue_text}")
+            tier3 = cues.get("tier3_regression", [])
+            if tier3:
+                lines.append("  回归训练 (Tier 3):")
+                for c in tier3[:1]:
+                    ex_text = c.get("exercise", str(c))
+                    lines.append(f"    • {ex_text}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_cue_effectiveness_block(cue_effectiveness: Optional[dict]) -> str:
+        """Build the cue effectiveness feedback block.
+
+        Returns empty string if no cue tracking data available.
+        """
+        if not cue_effectiveness:
+            return ""
+
+        lines = ["【上次指导效果】"]
+        for error_name, effect in cue_effectiveness.items():
+            last_cue = effect.get("last_cue", "")
+            effective = effect.get("effective", True)
+            tried = effect.get("tried_cues", [])
+            if effective:
+                lines.append(f"{error_name}: 上次提示\"{last_cue}\"→ 效果良好，错误已改善")
+            else:
+                tried_str = "、".join(tried[-3:]) if tried else last_cue
+                lines.append(f"{error_name}: 上次提示\"{last_cue}\"→ 效果不佳（错误仍持续）")
+                lines.append(f"  已尝试过的 cue: {tried_str} → 请尝试不同 cue 角度或升级 Tier")
+        return "\n".join(lines)
 
     @staticmethod
     def _fmt_angle(value) -> str:

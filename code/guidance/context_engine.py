@@ -53,6 +53,16 @@ class GuidanceState:
         self.last_milestone_count: int = 0
         self.consecutive_error_frames: dict[str, int] = {}
 
+        # --- Cue 效果追踪 (Phase 4) ---
+        self.cue_history: list[dict] = []
+        # 每条记录: {cue, tier, focus, target_error, timestamp,
+        #            error_resolved, frames_to_resolve}
+        self.last_active_cues: dict[str, str] = {}
+        # key = 错误名, value = 最后使用的 cue 文本
+        self._cue_frame_counters: dict[str, int] = {}
+        # key = cue 文本, value = 自给出后经过的帧数
+        self._RESOLVE_WINDOW = 30  # 多少帧内错误消失视为 cue 有效
+
     def update(self, result: AnalysisResult):
         """Update state from one analysis frame."""
         self.total_reps = result.count
@@ -71,13 +81,40 @@ class GuidanceState:
             self.consecutive_good_form += 1
             self.consecutive_bad_form = 0
             self.consecutive_error_frames.clear()
+
+            # Phase 4: Check if pending cues have resolved
+            self._check_cue_resolution(set())
         else:
             self.consecutive_bad_form += 1
             self.consecutive_good_form = 0
+            current_errors = set()
             for err in result.errors:
                 self.error_counts[err.name] = self.error_counts.get(err.name, 0) + 1
                 self.consecutive_error_frames[err.name] = \
                     self.consecutive_error_frames.get(err.name, 0) + 1
+                current_errors.add(err.name)
+
+            # Phase 4: Check if pending cues have resolved
+            self._check_cue_resolution(current_errors)
+
+    def _check_cue_resolution(self, current_errors: set):
+        """Check unresolved cues — if target error is gone, mark as resolved."""
+        for cue_entry in self.cue_history:
+            if cue_entry.get("error_resolved", False):
+                continue
+            target = cue_entry.get("target_error", "")
+            cue_text = cue_entry.get("cue", "")
+            # Increment frame counter
+            self._cue_frame_counters[cue_text] = \
+                self._cue_frame_counters.get(cue_text, 0) + 1
+
+            if target and target not in current_errors:
+                # Error disappeared — check if within resolve window
+                frames = self._cue_frame_counters.get(cue_text, 0)
+                if frames <= self._RESOLVE_WINDOW:
+                    cue_entry["error_resolved"] = True
+                    cue_entry["frames_to_resolve"] = frames
+                # else: too slow — probably not cue's effect
 
 
 class ContextEngine:
@@ -376,6 +413,93 @@ class ContextEngine:
         if overall_rating is not None:
             result_dict["overall_rating"] = overall_rating
         return result_dict
+
+    # ------------------------------------------------------------------
+    # Cue 效果追踪 (Phase 4)
+    # ------------------------------------------------------------------
+
+    def record_cue(self, cue: str, tier: int, focus: str, target_error: str):
+        """Record a correction cue that was sent to the user.
+
+        Called after the LLM generates guidance — stores the cue for later
+        effectiveness tracking. If the target error resolves within the
+        resolve window, the cue is marked effective.
+
+        Args:
+            cue: The cue text sent to the user.
+            tier: 1 (external), 2 (internal), or 3 (regression).
+            focus: "external" / "internal" / "regression".
+            target_error: The Chinese error name this cue targets.
+        """
+        self.state.cue_history.append({
+            "cue": cue,
+            "tier": tier,
+            "focus": focus,
+            "target_error": target_error,
+            "timestamp": time.time(),
+            "error_resolved": False,
+            "frames_to_resolve": -1,
+        })
+        self.state.last_active_cues[target_error] = cue
+        self.state._cue_frame_counters[cue] = 0
+
+    def get_cue_effectiveness(self, target_error: str) -> dict | None:
+        """Return effectiveness data for the most recent cue targeting an error.
+
+        Returns None if no cue has been recorded for this error.
+        """
+        # Find the most recent cue for this error
+        relevant = [c for c in self.state.cue_history
+                    if c.get("target_error") == target_error]
+        if not relevant:
+            return None
+
+        latest = relevant[-1]
+        tried_cues = list(dict.fromkeys(  # dedup preserving order
+            c["cue"] for c in relevant if not c.get("error_resolved", False)
+        ))
+
+        return {
+            "last_cue": latest.get("cue", ""),
+            "effective": latest.get("error_resolved", False),
+            "tried_cues": tried_cues if not latest.get("error_resolved") else [],
+            "frames_to_resolve": latest.get("frames_to_resolve", -1),
+        }
+
+    def get_all_cue_effectiveness(self) -> dict:
+        """Return cue effectiveness for all tracked errors.
+
+        Returns:
+            {error_name: {last_cue, effective, tried_cues}}
+        """
+        # Group cues by target error
+        by_error: dict[str, list[dict]] = {}
+        for c in self.state.cue_history:
+            target = c.get("target_error", "")
+            if target not in by_error:
+                by_error[target] = []
+            by_error[target].append(c)
+
+        result = {}
+        for error_name, cues in by_error.items():
+            latest = cues[-1]
+            tried = list(dict.fromkeys(
+                c["cue"] for c in cues if not c.get("error_resolved", False)
+            ))
+            result[error_name] = {
+                "last_cue": latest.get("cue", ""),
+                "effective": latest.get("error_resolved", False),
+                "tried_cues": tried if not latest.get("error_resolved") else [],
+            }
+        return result
+
+    def get_ineffective_cues(self, target_error: str) -> list[str]:
+        """Return list of cue texts that were tried but didn't work for an error."""
+        return [
+            c["cue"] for c in self.state.cue_history
+            if c.get("target_error") == target_error
+            and not c.get("error_resolved", False)
+        ]
 
     def reset(self):
         self.state = GuidanceState()

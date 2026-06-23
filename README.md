@@ -281,7 +281,7 @@ cd frontend && npm install && npm run dev
   - `PUT /api/config/scoring` — 部分更新参数，立即生效无需重启
 - `backend/schemas.py` — 新增 `ScoringConfig` 模型（`target_low` / `target_high` / `symmetry_max_diff` / `angle_tolerance` / `smooth_alpha`）
 - `backend/services/detector.py` — 新增 `debug_info` 字段（每帧暴露原始评分内部变量）、`apply_tuning()` / `get_tuning_params()` 方法
-- `code/pose_analyzer.py` — `PoseAnalyzer` 新增 `apply_tuning()` 方法，同步更新 `ExerciseStandard` 和 `MovementScorer` 两处的参数；`MovementScorer` 新增 `_angle_records` 列表（每帧存 (angle, dynamic_target) 对），`_dynamic_target()` 方法在过渡区用实际角度作为目标避免误罚，`angle_tolerance` 默认值从 10.0 调整为 15.0
+- `code/pose_analyzer.py` — `PoseAnalyzer` 新增 `apply_tuning()` 方法，同步更新 `ExerciseStandard` 和 `MovementScorer` 两处的参数；`MovementScorer` 新增 `_angle_records` 列表（每帧存 (angle, dynamic_target) 对），`_dynamic_target()` 方法在过渡区用实际角度作为目标避免误罚，`angle_tolerance` 默认值从 10.0 调整为 12.5
 
 **接入方式：** `App.vue` 用 `showDebug` ref 控制显隐，`DebugOverlay` 通过 props 接收 `debug` / `score` / `phase`，滑块变更调用 `PUT /api/config/scoring`。
 
@@ -324,7 +324,7 @@ cd frontend && npm install && npm run dev
 
 | 文件 | 改动 |
 |------|------|
-| `code/pose_analyzer.py` | symmetry_max_diff 统一 25.0；5 个躯干角错误检测比较方向修复；新增 apply_tuning()、_angle_records / _dynamic_target()；angle_tolerance 10→15 |
+| `code/pose_analyzer.py` | symmetry_max_diff 统一 25.0；5 个躯干角错误检测比较方向修复；新增 apply_tuning()、_angle_records / _dynamic_target()；angle_tolerance 10→12.5 |
 | `code/guidance/context_engine.py` | 新增 SUPPRESS_SCORE_THRESHOLD=80，三个 _check_* 方法加高分判断 |
 | `code/visualization.py` | 10 个动作 trunk 参考范围从"前倾度"转为"垂直夹角" |
 | `backend/routers/config.py` | **新增** — GET/PUT `/api/config/scoring` 运行时调参接口 |

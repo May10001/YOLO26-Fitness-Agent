@@ -34,6 +34,8 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+    diagnosis: dict | None = None           # Phase 3: LLM diagnostic JSON
+    recommended_cues: list[dict] | None = None  # Phase 3: extracted cue list
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -48,11 +50,32 @@ async def chat(req: ChatRequest):
     if req.pose_context:
         try:
             from code.langgraph_agent.agent import CoachAgent
+            from code.langgraph_agent.state import state_from_dict
             agent = CoachAgent(api_config=config)
-            reply = agent.chat(req.message, pose_context_str=req.pose_context)
+
+            # Parse pose_context JSON to build full state
+            try:
+                data = json.loads(req.pose_context)
+                chat_mode = data.get("chat_mode", "reactive")
+            except json.JSONDecodeError:
+                data = {}
+                chat_mode = "reactive"
+
+            state = state_from_dict(
+                data, chat_mode=chat_mode,
+                user_message=req.message,
+                api_config=config,
+            )
+            result = agent._graph.invoke(state)
+
+            reply = result.get("guidance_text") or result.get("response", "")
+            diagnosis = result.get("diagnosis_json") or None
+            cues = result.get("recommended_cues") or None
         except Exception as e:
             reply = f"AI教练服务异常: {e}"
-        return ChatResponse(reply=reply)
+            diagnosis = None
+            cues = None
+        return ChatResponse(reply=reply, diagnosis=diagnosis, recommended_cues=cues)
 
     # --- Path B: generic chat (no pose_context), remote API available ---
     if remote_ok:

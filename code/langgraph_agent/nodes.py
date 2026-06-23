@@ -38,8 +38,10 @@ def build_context_node(state: CoachAgentState) -> dict:
     """Build structured Chinese context from scoring state.
 
     Reconstructs AnalysisResult-like and GuidanceState-like objects from the
-    typed state dict, then delegates to CoachContextBuilder (the existing,
-    tested formatting logic). No new formatting code — pure bridge.
+    typed state dict, then delegates to CoachContextBuilder. Passes through
+    scorer_data and cue_effectiveness for diagnostic context injection.
+
+    No new formatting code — pure bridge.
     """
     from code.realtime_coach import CoachContextBuilder
 
@@ -49,6 +51,8 @@ def build_context_node(state: CoachAgentState) -> dict:
     chat_mode = state.get("chat_mode", "reactive")
     exercise_name = state.get("exercise_name", "深蹲")
     user_message = state.get("user_message", "")
+    scorer_data = state.get("scorer_data") or None
+    cue_effectiveness = state.get("cue_effectiveness") or None
 
     # Reconstruct AnalysisResult-like object
     score_obj = SimpleNamespace(
@@ -99,33 +103,52 @@ def build_context_node(state: CoachAgentState) -> dict:
 
     if chat_mode == "proactive":
         context = CoachContextBuilder.build_proactive(
-            analysis_obj, state_obj, exercise_name
+            analysis_obj, state_obj, exercise_name,
+            scorer_data=scorer_data,
+            cue_effectiveness=cue_effectiveness,
         )
     else:
         context = CoachContextBuilder.build_reactive(
-            analysis_obj, state_obj, exercise_name, user_message
+            analysis_obj, state_obj, exercise_name, user_message,
+            scorer_data=scorer_data,
+            cue_effectiveness=cue_effectiveness,
         )
 
     return {"context_prompt": context}
 
 
 # Node 3: DashScope LLM call
-#将系统_prompt和上下文_prompt发送到DashScope QWEN API，返回教练响应 
+#将系统_prompt和上下文_prompt发送到DashScope QWEN API，返回教练响应
 def call_dashscope_node(state: CoachAgentState) -> dict:
     """Send system prompt + context to DashScope QWEN API.
 
     Uses the exact same API pattern as backend/routers/chat.py (OpenAI SDK
     against dashscope.aliyuncs.com). Returns the model's coaching response.
+
+    Phase 3: Parses two-stage <diagnosis>...</diagnosis><guidance>...</guidance>
+    output and stores structured diagnosis + recommended_cues in state.
     """
     api_config = state.get("api_config", {})
     if not api_config.get("use_remote") or not api_config.get("api_key"):
-        return {"error": "请在项目根目录的 data/api_config.json 中配置 DashScope API 密钥（use_remote, api_key, model_code），以启用AI教练功能。", "response": ""}
+        return {
+            "error": "请在项目根目录的 data/api_config.json 中配置 DashScope API 密钥（use_remote, api_key, model_code），以启用AI教练功能。",
+            "response": "",
+            "diagnosis_json": {},
+            "guidance_text": "",
+            "recommended_cues": [],
+        }
 
     system_prompt = state.get("system_prompt", "")
     context_prompt = state.get("context_prompt", "")
 
     if not context_prompt:
-        return {"error": "No context prompt to send", "response": ""}
+        return {
+            "error": "No context prompt to send",
+            "response": "",
+            "diagnosis_json": {},
+            "guidance_text": "",
+            "recommended_cues": [],
+        }
 
     try:
         from openai import OpenAI
@@ -143,9 +166,27 @@ def call_dashscope_node(state: CoachAgentState) -> dict:
             temperature=0.7,
             max_tokens=800,
         )
-        return {"response": completion.choices[0].message.content, "error": ""}
+        raw_response = completion.choices[0].message.content
+
+        # Phase 3: Parse two-stage output
+        from code.coaching.diagnostic_context import CoachingOutputParser
+        parsed = CoachingOutputParser.parse(raw_response)
+
+        return {
+            "response": parsed.guidance,           # backward compat
+            "diagnosis_json": parsed.diagnosis,    # Phase 3
+            "guidance_text": parsed.guidance,      # Phase 3
+            "recommended_cues": CoachingOutputParser.extract_cues(parsed.diagnosis),
+            "error": "",
+        }
     except Exception as exc:
-        return {"response": "", "error": str(exc)}
+        return {
+            "response": "",
+            "diagnosis_json": {},
+            "guidance_text": "",
+            "recommended_cues": [],
+            "error": str(exc),
+        }
 
 
 def _float_or_none(value) -> float | None:

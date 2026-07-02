@@ -616,11 +616,12 @@ class MovementScorer:
         self.exercise_name = exercise_name
         self.standard = EXERCISE_STANDARDS.get(exercise_name)
         self.smooth_alpha = smooth_alpha  # EMA 平滑系数
-        self.angle_tolerance = 15.0        # 角度高斯容差 (°), 可外部调参
+        self.angle_tolerance = 12.5        # 角度高斯容差 (°), 可外部调参
         self._angle_samples: list = []       # 原始角度值
         self._smoothed_angles: list = []     # EMA 平滑后角度值 (保留兼容)
         self._angle_records: list = []       # [(smoothed_angle, target), ...] 每帧存自己的目标
         self._symmetry_diffs: dict[str, list] = {}  # 每帧各关节左右差值
+        self._per_joint_history: dict[str, list[float]] = {}  # {joint_key: [angle, ...]} 逐关节最近 60 帧
         self._current_phase: str = "高位"     # 从 PoseAnalyzer 传入的实际相位
 
         # EMA 平滑后的得分缓存 (None = 尚未初始化)
@@ -684,15 +685,84 @@ class MovementScorer:
             return self.standard.target_high
 
     def update_symmetry(self, angles: JointAngles):
-        """记录一帧的对称性数据."""
-        if self.standard is None:
-            return
-        for joint in self.standard.symmetry_joints:
-            diff = angles.diff_symmetric(joint)
-            if diff is not None:
-                if joint not in self._symmetry_diffs:
-                    self._symmetry_diffs[joint] = []
-                self._symmetry_diffs[joint].append(diff)
+        """记录一帧的对称性数据 + 逐关节角度历史（供标准差计算）."""
+        # --- 对称性差值 ---
+        if self.standard is not None:
+            for joint in self.standard.symmetry_joints:
+                diff = angles.diff_symmetric(joint)
+                if diff is not None:
+                    if joint not in self._symmetry_diffs:
+                        self._symmetry_diffs[joint] = []
+                    self._symmetry_diffs[joint].append(diff)
+
+        # --- 逐关节原始角度（供诊断层计算滑动窗口标准差）---
+        _JOINT_ATTRS = [
+            "knee_left", "knee_right", "hip_left", "hip_right",
+            "elbow_left", "elbow_right", "shoulder_left", "shoulder_right",
+            "ankle_left", "ankle_right",
+        ]
+        for attr in _JOINT_ATTRS:
+            val = getattr(angles, attr, None)
+            if val is not None:
+                if attr not in self._per_joint_history:
+                    self._per_joint_history[attr] = []
+                self._per_joint_history[attr].append(float(val))
+                # 只保留最近 60 帧
+                if len(self._per_joint_history[attr]) > 60:
+                    self._per_joint_history[attr].pop(0)
+
+        # 躯干角度单独记录
+        if angles.trunk_angle is not None:
+            if "trunk" not in self._per_joint_history:
+                self._per_joint_history["trunk"] = []
+            self._per_joint_history["trunk"].append(float(angles.trunk_angle))
+            if len(self._per_joint_history["trunk"]) > 60:
+                self._per_joint_history["trunk"].pop(0)
+
+    # ---- 诊断数据暴露 (供 DiagnosticContextBuilder 使用) ----
+
+    @property
+    def angle_records(self) -> list:
+        """返回 (smoothed_angle, target) 记录列表（拷贝，最多 60 条）."""
+        return list(self._angle_records)
+
+    @property
+    def symmetry_diffs(self) -> dict:
+        """返回各关节左右差值记录（拷贝）."""
+        return {k: list(v) for k, v in self._symmetry_diffs.items()}
+
+    @property
+    def per_joint_history(self) -> dict[str, list[float]]:
+        """返回逐关节角度历史（拷贝），供标准差计算."""
+        return {k: list(v) for k, v in self._per_joint_history.items()}
+
+    @property
+    def score_history(self) -> dict:
+        """返回分维度历史（拷贝，最多 60 条）."""
+        return {
+            "total": list(self._score_history),
+            "angle": list(self._angle_score_history),
+            "temporal": list(self._temporal_score_history),
+            "symmetry": list(self._symmetry_score_history),
+        }
+
+    def get_diagnostic_data(self) -> dict:
+        """返回诊断所需的所有内部数据，供 DiagnosticContextBuilder 使用."""
+        return {
+            "_standard": self.standard,
+            "angle_records": self.angle_records,
+            "symmetry_diffs": self.symmetry_diffs,
+            "per_joint_history": self.per_joint_history,
+            "score_history": self.score_history,
+            "angle_tolerance": self.angle_tolerance,
+            "smooth_alpha": self.smooth_alpha,
+            "current_phase": self._current_phase,
+            "smooth_scores": {
+                "angle": self._smooth_angle_score,
+                "temporal": self._smooth_temporal_score,
+                "symmetry": self._smooth_symmetry_score,
+            },
+        }
 
     def compute(self, temporal: TemporalFeatures) -> ScoreResult:
         """计算最终评分 (含帧间 EMA 平滑，减少单帧误差)."""
@@ -900,6 +970,7 @@ class MovementScorer:
         self._smoothed_angles.clear()
         self._angle_records.clear()
         self._symmetry_diffs.clear()
+        self._per_joint_history.clear()
         self._smooth_angle_score = None
         self._smooth_temporal_score = None
         self._smooth_symmetry_score = None
@@ -1185,6 +1256,11 @@ class PoseAnalyzer:
         # 运动时长追踪
         self._session_start_time: Optional[float] = None  # 首次进入运动相位的时间
         self._session_active: bool = False
+
+    @property
+    def scorer(self) -> MovementScorer:
+        """公开 MovementScorer 实例，供 DiagnosticContextBuilder 读取诊断数据."""
+        return self._scorer
 
     def apply_tuning(self, **kwargs):
         """运行时调参 — 同步更新 PoseAnalyzer.standard 和 MovementScorer.standard.

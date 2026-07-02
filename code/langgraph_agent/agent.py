@@ -49,20 +49,26 @@ class CoachAgent:
     # ------------------------------------------------------------------
 
     def coach_proactive(self, analysis_result, guidance_state,
-                        exercise_name: str) -> dict:
+                        exercise_name: str,
+                        scorer_data: dict | None = None,
+                        cue_effectiveness: dict | None = None) -> dict:
         """Build state from live AnalysisResult + GuidanceState, invoke graph.
 
         Args:
             analysis_result: code.pose_analyzer.AnalysisResult
             guidance_state: code.guidance.context_engine.GuidanceState
             exercise_name: Chinese exercise name
+            scorer_data: Optional diagnostic data from MovementScorer
+            cue_effectiveness: Optional cue tracking feedback dict
 
         Returns:
-            {"response": str, "error": str, ...} — full state after graph run
+            {"response": str, "diagnosis_json": dict, "guidance_text": str,
+             "recommended_cues": list, "error": str}
         """
         state = state_from_analysis(
             analysis_result, guidance_state, exercise_name,
             chat_mode="proactive", api_config=self._api_config,
+            scorer_data=scorer_data, cue_effectiveness=cue_effectiveness,
         )
         return self._graph.invoke(state)
 
@@ -72,7 +78,9 @@ class CoachAgent:
 
     def coach_reactive(self, user_message: str, analysis_result=None,
                        guidance_state=None,
-                       exercise_name: str = "深蹲") -> dict:
+                       exercise_name: str = "深蹲",
+                       scorer_data: dict | None = None,
+                       cue_effectiveness: dict | None = None) -> dict:
         """User asks a question; include current training state for context.
 
         Args:
@@ -80,15 +88,20 @@ class CoachAgent:
             analysis_result: Optional current-frame AnalysisResult
             guidance_state: Optional GuidanceState with session history
             exercise_name: Chinese exercise name
+            scorer_data: Optional diagnostic data from MovementScorer
+            cue_effectiveness: Optional cue tracking feedback dict
 
         Returns:
-            {"response": str, "error": str, ...}
+            {"response": str, "diagnosis_json": dict, "guidance_text": str,
+             "recommended_cues": list, "error": str}
         """
         if analysis_result is not None and guidance_state is not None:
             state = state_from_analysis(
                 analysis_result, guidance_state, exercise_name,
                 chat_mode="reactive", user_message=user_message,
                 api_config=self._api_config,
+                scorer_data=scorer_data,
+                cue_effectiveness=cue_effectiveness,
             )
         else:
             # No live pose data — send user message directly
@@ -108,9 +121,15 @@ class CoachAgent:
                 "chat_mode": "reactive",
                 "user_message": user_message,
                 "api_config": self._api_config,
+                "scorer_data": {},
+                "cue_history": [],
+                "cue_effectiveness": {},
                 "system_prompt": "",
                 "context_prompt": "",
                 "response": "",
+                "diagnosis_json": {},
+                "guidance_text": "",
+                "recommended_cues": [],
                 "error": "",
             }
         return self._graph.invoke(state)
@@ -157,9 +176,15 @@ class CoachAgent:
             "chat_mode": "reactive",
             "user_message": user_message,
             "api_config": self._api_config,
+            "scorer_data": {},
+            "cue_history": [],
+            "cue_effectiveness": {},
             "system_prompt": "",
             "context_prompt": "",
             "response": "",
+            "diagnosis_json": {},
+            "guidance_text": "",
+            "recommended_cues": [],
             "error": "",
         }
         result = self._graph.invoke(state)

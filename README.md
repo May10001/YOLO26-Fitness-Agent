@@ -66,8 +66,12 @@ YOLO26-Fitness-Agent/
 │   ├── agent.py                     # FitnessAgent 统一接口
 │   ├── realtime_coach.py            # ★ 实时 LLM 教练引擎（触发判断+上下文+频率控制）
 │   ├── coach_system_prompt.py       # ★ 微调教练模型系统提示词
+│   ├── biomechanics/
+│   │   └── knowledge_base.py        # ★ 生物力学知识库（10动作根因链+分层纠正cue）
+│   ├── coaching/
+│   │   └── diagnostic_context.py    # ★ 诊断上下文构建器 + 两段式输出解析
 │   ├── guidance/
-│   │   └── context_engine.py        # 逐帧教练指导引擎（规则驱动）
+│   │   └── context_engine.py        # 逐帧教练指导引擎（规则驱动 + cue效果追踪）
 │   ├── planning/
 │   │   ├── user_profile.py          # 用户画像（JSON 持久化）
 │   │   └── plan_generator.py        # 周度训练计划生成
@@ -185,6 +189,118 @@ RealTimeCoach
   └── RealTimeCoach         → 冷却管理 + 频率限制 + API 调用协调
 ```
 
+### LLM 教练智能诊断升级（四步）
+
+> 让 LLM 从"报数机器"升级为"会推理的教练"：先诊断根因，再给出可执行的动作 cue，并跟踪指导效果。
+
+#### Step 1：上下文从裸角度 → 诊断数据
+
+不再把"68°, 82°"直接丢给 LLM，而是构建结构化诊断快照（`DiagnosticContextBuilder`）：
+
+| 维度 | 内容 | 示例 |
+|------|------|------|
+| 逐关节偏差 | 当前值、目标值、偏差、状态标签 | `左膝: 140° (目标 170°, 偏差 -30°, 状态: 不足)` |
+| 标准差 σ | 滑动窗口（15 帧）标准差，衡量关节**稳定性** | `σ=1.0° (稳定)` vs `σ=8.9° (剧烈波动)` |
+| 趋势序列 | 线性回归斜率 + 方向标签 + 最近 5 帧序列 | `改善中 (斜率 +0.35°/帧)` |
+| 共现模式 | 多错误共现的 biomechanical 解读 | `膝内扣 + 弓背 → 臀中肌薄弱 + 核心不稳` |
+| 维度诊断 | 识别角度/时序/对称中哪个拖低了总分 | `时序维度明显偏低 (12/30)，需重点改进` |
+
+**标准差的意义**：LLM 可以区分三种本质不同的场景——
+
+| 偏差 | σ | 诊断 | 策略 |
+|------|---|------|------|
+| 大 | 小 | 习惯性错误（稳定偏离） | 重建动作模式，换 cue 角度 |
+| 大 | 大 | 疲劳/失控（偏离且波动） | 建议休息或降阶 |
+| 小 | 大 | 本体感觉差（目标正确但不稳） | 强调控制节奏 |
+
+实现文件：`code/coaching/diagnostic_context.py`（新增）、`code/pose_analyzer.py`（MovementScorer 新增 per_joint_history）
+
+#### Step 2：Prompt 嵌入生物力学知识
+
+每个动作的每个错误都配有完整的 biomechanical 知识图谱（`code/biomechanics/knowledge_base.py`）：
+
+```
+深蹲膝盖内扣:
+  root_cause_chain: 臀中肌薄弱 → 股骨内旋 + 髋内收 → 膝盖向内侧偏移 → 增加 ACL/MCL 剪切应力
+  correction_cues:
+    Tier 1 (外部注意力): "膝盖向外推开" / "想象站在一张纸上把它撕开" / "髋关节向外旋"
+    Tier 2 (内部注意力): "收紧臀中肌" / "大腿内侧不发力"
+    Tier 3 (回归训练):   "弹力带深蹲（外展辅助）" / "箱式深蹲（限制幅度）"
+  compensation_patterns: 足弓塌陷、骨盆前倾
+```
+
+- 覆盖全部 10 个动作的所有错误类型
+- `CoachContextBuilder._build_biomechanics_block()` 动态注入当前检测到错误的生物力学知识
+- COACH_SYSTEM_PROMPT 定义 Tier1→Tier2→Tier3 优先级策略（外部 cue 优先，无效时升级）
+
+#### Step 3：LLM 两段式输出
+
+系统 prompt 强制 LLM 按以下 XML 格式输出，由 `CoachingOutputParser` 解析：
+
+```xml
+<diagnosis>
+{"root_cause": "根因分析", "confidence": 0.8,
+ "affected_joints": ["左膝", "右膝"],
+ "recommended_cues": [{"cue": "膝盖向外推开", "tier": 1, "focus": "external"}],
+ "expected_effect": "缩小膝盖间距，减少 ACL 应力"}
+</diagnosis>
+<guidance>
+你深蹲时膝盖有点往里扣了。试着想象脚下有张纸，发力时把纸向外撕开——这样膝盖自然会往外走。我们先慢一点，控制好再加速。
+</guidance>
+```
+
+- `<diagnosis>`：内部诊断 JSON（根因、置信度、推荐 cue、预期效果）— 供系统追踪
+- `<guidance>`：面向用户的自然语言指导文本 — 展示在聊天面板
+- 解析后分别存入 `CoachAgentState.diagnosis_json` / `guidance_text` / `recommended_cues`
+
+实现文件：`code/coach_system_prompt.py`、`code/coaching/diagnostic_context.py`（CoachingOutputParser）、`code/langgraph_agent/nodes.py`、`state.py`
+
+#### Step 4：Cue 效果追踪
+
+系统会记住上一次给了什么 cue，并自动检测是否有效：
+
+- **记录**：每次发出 cue 时，`GuidanceState.record_cue()` 记录 {cue_text, tier, focus, target_error, timestamp}
+- **检测**：30 帧 `RESOLVE_WINDOW` 内，如果目标错误消失 → 标记为有效；如果错误持续 → 标记为无效
+- **反馈**：`_build_cue_effectiveness_block()` 将无效 cue 反馈注入 prompt：
+  ```
+  【上次指导效果】
+  膝盖内扣: 上次提示"膝盖向外推开"→ 效果不佳（错误仍持续）
+  已尝试过的 cue: 膝盖向外推开、收紧臀部 → 请尝试不同 cue 角度或升级 Tier
+  ```
+- **LLM 响应**：系统 prompt 指示：若 cue 无效，换一个不同角度或不同 tier 的 cue（如从外部注意力 → 内部注意力 → 回归训练）
+
+实现文件：`code/guidance/context_engine.py`（GuidanceState 扩展）、`code/realtime_coach.py`（_build_cue_effectiveness_block）
+
+#### 数据流总览
+
+```
+Webcam → YOLO26 → PoseAnalyzer → MovementScorer
+                                      ├── per_joint_history (逐关节60帧)
+                                      ├── angle_records (主角度+目标)
+                                      └── score_history (分维度)
+                                          ↓
+                              DiagnosticContextBuilder.build()
+                                      ├── 逐关节偏差 + σ + 稳定性
+                                      ├── 角度趋势 (线性回归)
+                                      ├── 共现模式 (biomechanics KB 查询)
+                                      └── 维度诊断
+                                          ↓
+                              CoachContextBuilder
+                                      ├── 诊断块 (_build_diagnostic_block)
+                                      ├── 生物力学块 (_build_biomechanics_block)
+                                      └── cue 效果块 (_build_cue_effectiveness_block)
+                                          ↓
+                              COACH_SYSTEM_PROMPT + 结构化上下文
+                                          ↓
+                              百炼 DashScope Qwen2.5-7B + LoRA
+                                          ↓
+                              CoachingOutputParser
+                                      ├── <diagnosis> → diagnosis_json
+                                      └── <guidance> → 聊天面板展示
+                                          ↓
+                              GuidanceState.record_cue() → 下次循环
+```
+
 ## Web 前端（Vue 3 + FastAPI）
 
 > 现代浏览器界面，替代 Tkinter 桌面 GUI。前端 Vue 3 + Vite + TypeScript + TailwindCSS，后端 FastAPI + WebSocket。这是目前主推的交互形态，后续升级请优先基于此。
@@ -281,7 +397,7 @@ cd frontend && npm install && npm run dev
   - `PUT /api/config/scoring` — 部分更新参数，立即生效无需重启
 - `backend/schemas.py` — 新增 `ScoringConfig` 模型（`target_low` / `target_high` / `symmetry_max_diff` / `angle_tolerance` / `smooth_alpha`）
 - `backend/services/detector.py` — 新增 `debug_info` 字段（每帧暴露原始评分内部变量）、`apply_tuning()` / `get_tuning_params()` 方法
-- `code/pose_analyzer.py` — `PoseAnalyzer` 新增 `apply_tuning()` 方法，同步更新 `ExerciseStandard` 和 `MovementScorer` 两处的参数；`MovementScorer` 新增 `_angle_records` 列表（每帧存 (angle, dynamic_target) 对），`_dynamic_target()` 方法在过渡区用实际角度作为目标避免误罚，`angle_tolerance` 默认值从 10.0 调整为 15.0
+- `code/pose_analyzer.py` — `PoseAnalyzer` 新增 `apply_tuning()` 方法，同步更新 `ExerciseStandard` 和 `MovementScorer` 两处的参数；`MovementScorer` 新增 `_angle_records` 列表（每帧存 (angle, dynamic_target) 对），`_dynamic_target()` 方法在过渡区用实际角度作为目标避免误罚，`angle_tolerance` 默认值从 10.0 调整为 12.5
 
 **接入方式：** `App.vue` 用 `showDebug` ref 控制显隐，`DebugOverlay` 通过 props 接收 `debug` / `score` / `phase`，滑块变更调用 `PUT /api/config/scoring`。
 
@@ -324,7 +440,7 @@ cd frontend && npm install && npm run dev
 
 | 文件 | 改动 |
 |------|------|
-| `code/pose_analyzer.py` | symmetry_max_diff 统一 25.0；5 个躯干角错误检测比较方向修复；新增 apply_tuning()、_angle_records / _dynamic_target()；angle_tolerance 10→15 |
+| `code/pose_analyzer.py` | symmetry_max_diff 统一 25.0；5 个躯干角错误检测比较方向修复；新增 apply_tuning()、_angle_records / _dynamic_target()；angle_tolerance 10→12.5 |
 | `code/guidance/context_engine.py` | 新增 SUPPRESS_SCORE_THRESHOLD=80，三个 _check_* 方法加高分判断 |
 | `code/visualization.py` | 10 个动作 trunk 参考范围从"前倾度"转为"垂直夹角" |
 | `backend/routers/config.py` | **新增** — GET/PUT `/api/config/scoring` 运行时调参接口 |

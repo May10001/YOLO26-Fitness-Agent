@@ -110,6 +110,38 @@ export interface UserProfile {
   fitness_level: string
   goal: string
   equipment: string
+  injury_history?: string
+  liked_exercises?: string[]
+  disliked_exercises?: string[]
+  training_days_per_week?: number
+}
+
+/** One step in an AI-generated workout plan. */
+export interface PlanStep {
+  exercise: string
+  reps: number
+  sets: number
+  rest_seconds: number
+  tempo?: string
+  notes?: string
+  duration_seconds?: number
+}
+
+/** A block of exercises in an AI plan. */
+export interface PlanBlock {
+  name: string
+  rounds: number
+  exercises: PlanStep[]
+}
+
+/** AI-generated workout plan. */
+export interface AIPlan {
+  plan_name: string
+  plan_type: string
+  total_duration_minutes: number
+  warmup: PlanStep[]
+  blocks: PlanBlock[]
+  cooldown: PlanStep[]
 }
 
 /** One exercise in a daily plan. */

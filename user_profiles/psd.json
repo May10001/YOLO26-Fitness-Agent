@@ -1,0 +1,16 @@
+{
+  "name": "psd",
+  "age": 20,
+  "weight_kg": 70.0,
+  "height_cm": 170.0,
+  "fitness_level": "advanced",
+  "goal": "strength",
+  "equipment": "mat",
+  "injury_history": "",
+  "liked_exercises": [],
+  "disliked_exercises": [],
+  "training_days_per_week": 3,
+  "medical_notes": "",
+  "exercise_history": {},
+  "created_date": "2026-07-02"
+}

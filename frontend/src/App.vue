@@ -14,13 +14,26 @@
           :fps="fps"
           :stream="camera.stream.value"
           :show-debug="showDebug"
-          :target-reps="targetReps"
+          :target-reps="effectiveTargetReps"
         />
         <PoseViewer
           class="flex-1"
           :keypoints="ws.lastResult.value?.keypoints || null"
           :errors="ws.lastResult.value?.errors || []"
           :score-total="currentScore.total"
+        />
+        <PlanRunner
+          :visible="planMode"
+          :steps="planSteps"
+          :step-index="planStepIndex"
+          :reps-done="ws.lastResult.value?.count || 0"
+          :is-rest="planIsRest"
+          :rest-countdown="restCountdown"
+          :phase-label="planPhaseLabel"
+          :phase-class="planPhaseClass"
+          @skip="advancePlanStep"
+          @quit="quitPlanMode"
+          @skip-rest="skipRest"
         />
         <!-- Debug toggle button -->
         <button
@@ -81,7 +94,13 @@
                :pose-context="poseContext"
                :coach-message="ws.lastCoachMessage.value" />
       <HistoryPanel v-else-if="activeTab === 'history'" />
-      <PlanPanel v-else-if="activeTab === 'plan'" />
+      <template v-else-if="activeTab === 'plan'">
+        <ProfilePage ref="profilePageRef" />
+        <AIPlanGenerator
+          :profile="profileData"
+          @start="onPlanStart"
+        />
+      </template>
     </div>
   </div>
 
@@ -95,7 +114,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import type { ScoreData, PoseContext, SummaryData, ErrorSummary } from './types'
+import type { ScoreData, PoseContext, SummaryData, ErrorSummary, PlanStep } from './types'
 import { config } from './config'
 import { useCamera } from './composables/useCamera'
 import { useWebSocket } from './composables/useWebSocket'
@@ -108,56 +127,35 @@ import ScorePanel from './components/ScorePanel.vue'
 import CorrectionPanel from './components/CorrectionPanel.vue'
 import AiCoach from './components/AiCoach.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
-import PlanPanel from './components/PlanPanel.vue'
 import JointHeatmap from './components/JointHeatmap.vue'
 import PoseViewer from './components/PoseViewer.vue'
 import DebugOverlay from './components/DebugOverlay.vue'
 import TrainingSummary from './components/TrainingSummary.vue'
+import ProfilePage from './components/ProfilePage.vue'
+import AIPlanGenerator from './components/AIPlanGenerator.vue'
+import PlanRunner from './components/PlanRunner.vue'
 
 const camera = useCamera()
 const ws = useWebSocket()
 const training = useTrainingState()
 
-// Entry screen — shown on load, dismissed on click-to-enter
 const showEntry = ref(true)
-
-// Debug mode — toggle with 'D' key or button
 const showDebug = ref(false)
 
-function toggleDebug() {
-  showDebug.value = !showDebug.value
-}
-
+function toggleDebug() { showDebug.value = !showDebug.value }
 function onKeyDown(e: KeyboardEvent) {
   if (e.key === 'd' || e.key === 'D') {
     const tag = (e.target as HTMLElement)?.tagName
-    if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
-      toggleDebug()
-    }
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') toggleDebug()
   }
 }
 
-onMounted(() => {
-  fetchExercises()
-  window.addEventListener('keydown', onKeyDown)
-})
+onMounted(() => { fetchExercises(); window.addEventListener('keydown', onKeyDown) })
+onUnmounted(() => { stopFrameLoop(); camera.stop(); ws.disconnect(); window.removeEventListener('keydown', onKeyDown) })
 
-onUnmounted(() => {
-  stopFrameLoop()
-  camera.stop()
-  ws.disconnect()
-  window.removeEventListener('keydown', onKeyDown)
-})
-
-// Tab state
-const tabs = [
-  { key: 'coach', label: 'AI教练' },
-  { key: 'history', label: '历史' },
-  { key: 'plan', label: '计划' },
-]
+const tabs = [{ key: 'coach', label: 'AI教练' }, { key: 'history', label: '历史' }, { key: 'plan', label: '计划' }]
 const activeTab = ref('coach')
 
-// Fallback list while fetching from backend
 const exercises = ref<string[]>(['深蹲', '俯卧撑', '平板支撑', '卷腹', '开合跳'])
 const currentExercise = ref('深蹲')
 const fps = ref(0)
@@ -165,69 +163,67 @@ let frameInterval: number | null = null
 let frameCount = 0
 let fpsTimer: number | null = null
 
-// Session tracking
 const sessionId = ref<string | null>(null)
 const sessionStartTime = ref(0)
-
-// Session-level score tracking
 const bestScore = ref(0)
 const recentScores = ref<number[]>([])
 
-// Target rep mode
-const targetReps = ref(0)        // 0 = free mode
+const targetReps = ref(0)
 const targetReached = ref(false)
 const showSummary = ref(false)
-
-// Accumulated errors during session: name -> { count, severity, suggestion }
 const sessionErrors = ref<Map<string, ErrorSummary>>(new Map())
-
-// Per-rep dedup: only count each error name once per rep
 const lastRepCount = ref(0)
 const countedInThisRep = ref<Set<string>>(new Set())
-
-// Snapshot captured BEFORE WebSocket disconnect (avoids reading null values)
 const summarySnapshot = ref<SummaryData | null>(null)
+
+// ---- Plan mode ----
+const planMode = ref(false)
+const planSteps = ref<PlanStep[]>([])
+const planStepIndex = ref(0)
+const planIsRest = ref(false)
+const restCountdown = ref(0)
+const planPhaseLabel = ref('')
+const planPhaseClass = ref('')
+let restTimer: number | null = null
+
+// Profile ref for reading data
+const profilePageRef = ref<InstanceType<typeof ProfilePage> | null>(null)
+const profileData = computed(() => profilePageRef.value?.form || {
+  name: '用户', age: 25, weight_kg: 70, height_cm: 170,
+  goal: 'general', fitness_level: 'beginner', equipment: 'mat',
+  training_days_per_week: 3, injury_history: '', liked_exercises: [], disliked_exercises: [],
+})
+
+// Effective target: plan mode uses step reps, free mode uses targetReps
+const effectiveTargetReps = computed(() => {
+  if (planMode.value && planSteps.value[planStepIndex.value]) {
+    const s = planSteps.value[planStepIndex.value]
+    if (s.duration_seconds) return 0 // hold exercises don't count reps
+    return s.reps * s.sets
+  }
+  return targetReps.value
+})
 
 const currentScore = computed<ScoreData>(() =>
   ws.lastResult.value?.score || { total: 0, angle: 0, temporal: 0, symmetry: 0 }
 )
+const totalErrors = computed(() => ws.lastResult.value?.errors?.length || 0)
 
-const totalErrors = computed(() => {
-  return ws.lastResult.value?.errors?.length || 0
-})
-
-// Build pose context for AI coach
 const poseContext = computed<PoseContext>(() => {
   const r = ws.lastResult.value
   return {
-    exercise_name: currentExercise.value,
-    score: r?.score,
-    phase: r?.phase,
-    rep_count: r?.count ?? 0,
-    hold_time: r?.hold_time ?? 0,
-    errors: r?.errors,
-    best_score: bestScore.value,
-    recent_scores: [...recentScores.value],
-    chat_mode: 'reactive',
+    exercise_name: currentExercise.value, score: r?.score, phase: r?.phase,
+    rep_count: r?.count ?? 0, hold_time: r?.hold_time ?? 0, errors: r?.errors,
+    best_score: bestScore.value, recent_scores: [...recentScores.value], chat_mode: 'reactive',
   }
 })
 
-// Summary data — uses pre-disconnect snapshot to avoid null values
 const summaryData = computed<SummaryData>(() => {
   if (summarySnapshot.value) return summarySnapshot.value
-  return {
-    exercise: currentExercise.value,
-    totalReps: 0,
-    targetReps: 0,
-    bestScore: 0,
-    avgScore: 0,
-    duration: '0:00',
-    errors: [],
-    finalScore: { total: 0, angle: 0, temporal: 0, symmetry: 0 },
-  }
+  return { exercise: currentExercise.value, totalReps: 0, targetReps: 0, bestScore: 0, avgScore: 0, duration: '0:00', errors: [], finalScore: { total: 0, angle: 0, temporal: 0, symmetry: 0 } }
 })
 
-// Watch score → update best & recent
+// ---- Watch score ----
 watch(() => ws.lastResult.value?.score?.total, (newTotal) => {
   if (newTotal !== undefined && newTotal > 0) {
     if (newTotal > bestScore.value) bestScore.value = newTotal
@@ -236,40 +232,42 @@ watch(() => ws.lastResult.value?.score?.total, (newTotal) => {
   }
 })
 
-// Watch errors → accumulate once per rep, deduplicate by error name
-// Each error type counts at most 1 per rep, regardless of how many frames it appears
+// ---- Per-rep error counting ----
 watch(() => ws.lastResult.value?.errors, (errors) => {
   if (!errors || errors.length === 0) return
   const currentCount = ws.lastResult.value?.count || 0
-
-  // Only count errors when entering a new rep
   if (currentCount > lastRepCount.value) {
     lastRepCount.value = currentCount
     countedInThisRep.value = new Set()
-
     for (const e of errors) {
-      // Dedup: at most once per error name per rep
       if (countedInThisRep.value.has(e.name)) continue
       countedInThisRep.value.add(e.name)
-
       const existing = sessionErrors.value.get(e.name)
-      if (existing) {
-        existing.count++
-      } else {
-        sessionErrors.value.set(e.name, {
-          name: e.name,
-          count: 1,
-          severity: e.severity,
-          suggestion: e.suggestion,
-        })
-      }
+      if (existing) { existing.count++ }
+      else { sessionErrors.value.set(e.name, { name: e.name, count: 1, severity: e.severity, suggestion: e.suggestion }) }
     }
   }
 })
 
-// Watch rep count → auto-stop when target reached
+// ---- Plan step progression ----
 watch(() => ws.lastResult.value?.count, (count) => {
-  if (targetReps.value > 0 && count !== undefined && count >= targetReps.value && !targetReached.value) {
+  // Plan mode: advance when reps done
+  if (planMode.value && !planIsRest.value && count !== undefined && count > 0) {
+    const step = planSteps.value[planStepIndex.value]
+    if (step && !step.duration_seconds) {
+      const target = step.reps * step.sets
+      if (count >= target) {
+        // Step complete → start rest or next
+        if (step.rest_seconds > 0 && planStepIndex.value < planSteps.value.length - 1) {
+          startRest(step.rest_seconds)
+        } else {
+          advancePlanStep()
+        }
+      }
+    }
+  }
+  // Free mode: target reached
+  if (!planMode.value && targetReps.value > 0 && count !== undefined && count >= targetReps.value && !targetReached.value) {
     targetReached.value = true
     captureSummarySnapshot()
     stopTraining(true)
@@ -277,17 +275,110 @@ watch(() => ws.lastResult.value?.count, (count) => {
   }
 })
 
-function handleTarget(value: number) {
-  targetReps.value = value
-  targetReached.value = false
+function onPlanStart(steps: PlanStep[]) {
+  if (steps.length === 0) return
+  planSteps.value = steps
+  planStepIndex.value = 0
+  planIsRest.value = false
+  planMode.value = true
+  applyPlanStep()
+  // Auto-start training
+  startTraining()
 }
 
-function dismissSummary() {
-  showSummary.value = false
-  targetReached.value = false
+function applyPlanStep() {
+  const step = planSteps.value[planStepIndex.value]
+  if (!step) return
+  ws.reset()
+  // Determine phase label
+  if (planStepIndex.value === 0) {
+    planPhaseLabel.value = '热身'
+    planPhaseClass.value = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+  } else if (planStepIndex.value >= planSteps.value.length - (planSteps.value[planSteps.value.length - 1]?.duration_seconds ? 1 : 0)) {
+    planPhaseLabel.value = '整理'
+    planPhaseClass.value = 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+  } else {
+    planPhaseLabel.value = '训练'
+    planPhaseClass.value = 'bg-flame/20 text-flame border border-flame/30'
+  }
+  // Set exercise and target
+  if (currentExercise.value !== step.exercise) {
+    currentExercise.value = step.exercise
+    ws.setExercise(step.exercise)
+  }
+  lastRepCount.value = 0
 }
 
-// Fetch authoritative exercise list from backend
+function startRest(seconds: number) {
+  planIsRest.value = true
+  restCountdown.value = seconds
+  restTimer = window.setInterval(() => {
+    restCountdown.value--
+    if (restCountdown.value <= 0) {
+      if (restTimer) clearInterval(restTimer)
+      planIsRest.value = false
+      advancePlanStep()
+    }
+  }, 1000)
+}
+
+function skipRest() {
+  if (restTimer) clearInterval(restTimer)
+  restCountdown.value = 0
+  planIsRest.value = false
+  advancePlanStep()
+}
+
+function advancePlanStep() {
+  if (planStepIndex.value >= planSteps.value.length - 1) {
+    // Plan complete
+    captureSummarySnapshot()
+    quitPlanModeInternal()
+    showSummary.value = true
+    return
+  }
+  planStepIndex.value++
+  ws.reset()
+  lastRepCount.value = 0
+  applyPlanStep()
+}
+
+function quitPlanMode() {
+  quitPlanModeInternal()
+  handleStop()
+}
+
+function quitPlanModeInternal() {
+  planMode.value = false
+  planSteps.value = []
+  planStepIndex.value = 0
+  planIsRest.value = false
+  if (restTimer) { clearInterval(restTimer); restTimer = null }
+}
+
+// ---- Stop handler ----
+function handleStop() {
+  const wasTargetReached = !planMode.value && targetReps.value > 0 && (ws.lastResult.value?.count || 0) >= targetReps.value
+  if (wasTargetReached) captureSummarySnapshot()
+  stopTraining(false)
+  if (wasTargetReached) showSummary.value = true
+}
+
+function captureSummarySnapshot() {
+  const avg = recentScores.value.length > 0
+    ? recentScores.value.reduce((a, b) => a + b, 0) / recentScores.value.length : 0
+  const r = ws.lastResult.value
+  summarySnapshot.value = {
+    exercise: currentExercise.value, totalReps: r?.count || 0, targetReps: targetReps.value,
+    bestScore: bestScore.value, avgScore: avg, duration: training.formattedTime.value,
+    errors: [...sessionErrors.value.values()],
+    finalScore: r?.score || { total: 0, angle: 0, temporal: 0, symmetry: 0 },
+  }
+}
+
+function handleTarget(value: number) { targetReps.value = value; targetReached.value = false }
+function dismissSummary() { showSummary.value = false; targetReached.value = false }
+
 async function fetchExercises() {
   try {
     const res = await fetch(config.endpoints.exercises)
@@ -295,36 +386,25 @@ async function fetchExercises() {
     const data = await res.json()
     if (data.exercises && Array.isArray(data.exercises) && data.exercises.length > 0) {
       exercises.value = data.exercises
-      if (!data.exercises.includes(currentExercise.value)) {
-        currentExercise.value = data.exercises[0]
-      }
+      if (!data.exercises.includes(currentExercise.value)) currentExercise.value = data.exercises[0]
     }
-  } catch {
-    // Keep the hardcoded fallback list
-  }
+  } catch { /* keep fallback */ }
 }
 
 function resetSessionStats() {
-  bestScore.value = 0
-  recentScores.value = []
-  sessionErrors.value = new Map()
-  lastRepCount.value = 0
-  countedInThisRep.value = new Set()
-  summarySnapshot.value = null
-  targetReached.value = false
+  bestScore.value = 0; recentScores.value = []
+  sessionErrors.value = new Map(); lastRepCount.value = 0
+  countedInThisRep.value = new Set(); summarySnapshot.value = null; targetReached.value = false
 }
 
-// ---- Session lifecycle ----
 async function beginSession() {
   try {
     const res = await fetch(config.endpoints.sessionStart, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ exercise: currentExercise.value }),
     })
     const data = await res.json()
-    sessionId.value = data.session_id || null
-    sessionStartTime.value = Date.now()
+    sessionId.value = data.session_id || null; sessionStartTime.value = Date.now()
   } catch { /* non-critical */ }
 }
 
@@ -333,19 +413,11 @@ async function endSession() {
   try {
     const duration = (Date.now() - sessionStartTime.value) / 1000
     await fetch(config.endpoints.sessionStop, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        session_id: sessionId.value,
-        duration_seconds: duration,
-        stats: {
-          total_reps: ws.lastResult.value?.count || 0,
-          best_score: bestScore.value,
-          avg_score: recentScores.value.length > 0
-            ? recentScores.value.reduce((a, b) => a + b, 0) / recentScores.value.length
-            : 0,
-          error_counts: {},
-        },
+        session_id: sessionId.value, duration_seconds: duration,
+        stats: { total_reps: ws.lastResult.value?.count || 0, best_score: bestScore.value,
+          avg_score: recentScores.value.length > 0 ? recentScores.value.reduce((a, b) => a + b, 0) / recentScores.value.length : 0, error_counts: {} },
       }),
     })
   } catch { /* non-critical */ }
@@ -353,96 +425,31 @@ async function endSession() {
 }
 
 async function startTraining() {
-  await camera.start()
-  ws.connect()
-  training.start()
-  resetSessionStats()
+  await camera.start(); ws.connect(); training.start(); resetSessionStats()
   await beginSession()
   const waitOpen = setInterval(() => {
-    if (ws.connected.value) {
-      clearInterval(waitOpen)
-      ws.setExercise(currentExercise.value)
-      startFrameLoop()
-    }
+    if (ws.connected.value) { clearInterval(waitOpen); ws.setExercise(currentExercise.value); startFrameLoop() }
   }, 100)
-}
-
-// Capture summary snapshot BEFORE WebSocket disconnects
-function captureSummarySnapshot() {
-  const avg = recentScores.value.length > 0
-    ? recentScores.value.reduce((a, b) => a + b, 0) / recentScores.value.length
-    : 0
-  const r = ws.lastResult.value
-  summarySnapshot.value = {
-    exercise: currentExercise.value,
-    totalReps: r?.count || 0,
-    targetReps: targetReps.value,
-    bestScore: bestScore.value,
-    avgScore: avg,
-    duration: training.formattedTime.value,
-    errors: [...sessionErrors.value.values()],
-    finalScore: r?.score || { total: 0, angle: 0, temporal: 0, symmetry: 0 },
-  }
-}
-
-// handleStop: called by stop button
-function handleStop() {
-  const wasTargetReached = targetReps.value > 0 && (ws.lastResult.value?.count || 0) >= targetReps.value
-  if (wasTargetReached) {
-    captureSummarySnapshot()
-  }
-  stopTraining(false)
-  if (wasTargetReached) {
-    showSummary.value = true
-  }
 }
 
 async function stopTraining(silent: boolean) {
   stopFrameLoop()
-  if (!silent) {
-    await endSession()
-  }
-  training.stop()
-  camera.stop()
-  ws.disconnect()
-  if (!silent) {
-    resetSessionStats()
-  }
+  if (!silent) await endSession()
+  training.stop(); camera.stop(); ws.disconnect()
+  if (!silent) resetSessionStats()
 }
 
 function togglePause() {
-  if (training.state.value === 'paused') {
-    training.resume()
-    startFrameLoop()
-  } else {
-    training.pause()
-    stopFrameLoop()
-  }
+  if (training.state.value === 'paused') { training.resume(); startFrameLoop() }
+  else { training.pause(); stopFrameLoop() }
 }
 
-function switchExercise(name: string) {
-  currentExercise.value = name
-  ws.setExercise(name)
-  ws.reset()
-  resetSessionStats()
-}
+function switchExercise(name: string) { currentExercise.value = name; ws.setExercise(name); ws.reset(); resetSessionStats() }
 
 function startFrameLoop() {
-  frameInterval = window.setInterval(() => {
-    const frame = camera.captureFrame()
-    if (frame) {
-      ws.sendFrame(frame)
-      frameCount++
-    }
-  }, 33)
-  fpsTimer = window.setInterval(() => {
-    fps.value = frameCount
-    frameCount = 0
-  }, 1000)
+  frameInterval = window.setInterval(() => { const frame = camera.captureFrame(); if (frame) { ws.sendFrame(frame); frameCount++ } }, 33)
+  fpsTimer = window.setInterval(() => { fps.value = frameCount; frameCount = 0 }, 1000)
 }
 
-function stopFrameLoop() {
-  if (frameInterval) clearInterval(frameInterval)
-  if (fpsTimer) clearInterval(fpsTimer)
-}
+function stopFrameLoop() { if (frameInterval) clearInterval(frameInterval); if (fpsTimer) clearInterval(fpsTimer) }
 </script>

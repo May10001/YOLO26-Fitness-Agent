@@ -62,7 +62,7 @@ pip install -r requirements.txt openai fastapi uvicorn
 cat > data/api_config.json << 'EOF'
 {
   "use_remote": true,
-  "api_key": "sk-427b5295e2884e1183491ee9ab8b5e16",
+  "api_key": "sk-your-dashscope-api-key",
   "model_code": "qwen2.5-7b-instruct-d1a1cabf17c2-yzqr"
 }
 EOF

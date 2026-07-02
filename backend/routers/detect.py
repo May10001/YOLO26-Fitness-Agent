@@ -1,15 +1,14 @@
 import base64
-import json
 import asyncio
 from pathlib import Path
 import numpy as np
 import cv2
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from ..config import load_api_config
+
 router = APIRouter()
 _detector = None
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Shorter system prompt for proactive coaching pushes (from code/coach_system_prompt.py)
 COACH_PROACTIVE_SYSTEM = (
@@ -18,14 +17,6 @@ COACH_PROACTIVE_SYSTEM = (
     "优先关注安全问题，错误纠正要具体可操作，语气鼓励但不夸张。"
     "用中文回答。"
 )
-
-
-def _load_api_config() -> dict:
-    for name in ["api_config.json", "data/api_config.json"]:
-        path = PROJECT_ROOT / name
-        if path.exists():
-            return json.loads(path.read_text())
-    return {"use_remote": False, "api_key": "", "model_code": ""}
 
 
 def get_detector():
@@ -38,7 +29,7 @@ def get_detector():
 
 async def _send_proactive_coach(ws: WebSocket, trigger_context: str):
     """Call DashScope API with proactive coach context, send result as 'coach' message."""
-    config = _load_api_config()
+    config = load_api_config()
     if not config.get("use_remote") or not config.get("api_key"):
         # Silently skip — no API configured for proactive coaching
         return

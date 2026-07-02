@@ -12,8 +12,8 @@
     <div ref="spot" class="entry-spot" />
 
     <div class="entry-content">
-      <h1 ref="title" class="entry-title">YOLO26 FITNESS AGENT</h1>
-      <p ref="sub" class="entry-sub">你的实时 AI 健身教练</p>
+      <h1 ref="title" class="entry-title">ForMAI</h1>
+      <p ref="sub" class="entry-sub">你的专属 AI 健身教练</p>
       <div ref="enter" class="entry-enter">点击进入</div>
     </div>
   </div>

@@ -7,9 +7,9 @@ from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from code.pose_analyzer import EXERCISE_STANDARDS
+from ..config import load_api_config
 
 EXERCISE_LIST = list(EXERCISE_STANDARDS.keys())
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 router = APIRouter(prefix="/api")
 
@@ -17,14 +17,6 @@ CHAT_SYSTEM_PROMPT = "你是一位专业的健身教练AI助手，擅长运动�
 
 # In-memory session store for active training sessions
 _active_sessions: dict[str, dict] = {}
-
-
-def _load_api_config() -> dict:
-    for name in ["api_config.json", "data/api_config.json"]:
-        path = PROJECT_ROOT / name
-        if path.exists():
-            return json.loads(path.read_text())
-    return {"use_remote": False, "api_key": "", "model_code": ""}
 
 
 class ChatRequest(BaseModel):
@@ -40,7 +32,7 @@ class ChatResponse(BaseModel):
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    config = _load_api_config()
+    config = load_api_config()
     remote_ok = bool(config.get("use_remote") and config.get("api_key"))
 
     # --- Path A: pose_context provided → always use LangGraph CoachAgent ---
@@ -290,3 +282,153 @@ async def generate_plan(req: dict):
         }
     except Exception as e:
         return {"error": str(e)}
+
+
+PLAN_AI_SYSTEM_PROMPT = """你是一名专业的健身教练和运动科学专家。根据用户的画像和需求，生成一份结构化的训练计划。
+
+## 可用动作列表
+深蹲, 俯卧撑, 平板支撑, 卷腹, 开合跳, 引体向上, 臀桥, 高抬腿, 肩推, 侧平举
+
+## 输出格式 (严格 JSON)
+```json
+{
+  "plan_name": "计划名称",
+  "plan_type": "strength|endurance|weight_loss|general",
+  "total_duration_minutes": 30,
+  "warmup": [
+    {"exercise": "动作名", "reps": 20, "rest_after_seconds": 30}
+  ],
+  "blocks": [
+    {
+      "name": "训练块名称",
+      "rounds": 1,
+      "exercises": [
+        {"exercise": "动作名", "sets": 3, "reps": 12, "rest_seconds": 60, "notes": "要点"}
+      ]
+    }
+  ],
+  "cooldown": [
+    {"exercise": "动作名", "duration_seconds": 30}
+  ]
+}
+```
+
+## 规则
+1. 所有 exercise 必须是可用动作列表中的名称
+2. warmup 用开合跳/高抬腿等有氧动作，reps 10-30
+3. cooldown 用平板支撑等静态动作，duration_seconds 20-60
+4. 根据用户伤病历史排除不合适动作
+5. 根据用户偏好增加/减少动作
+6. 每周训练天数决定训练量
+7. reps/sets 根据水平调整：新手8-10次，中级10-15次，高级15-20次
+8. 只输出JSON，不输出其他内容
+"""
+
+PLAN_AI_USER_TEMPLATE = """## 用户画像
+- 年龄: {age}
+- 身高: {height_cm}cm / 体重: {weight_kg}kg
+- 健身目标: {goal}
+- 训练水平: {fitness_level}
+- 每周训练天数: {training_days_per_week}
+- 伤病史: {injury_history}
+- 喜欢动作: {liked_exercises}
+- 不想做: {disliked_exercises}
+
+## 用户需求
+{user_request}
+
+请生成一份完整的训练计划JSON。"""
+
+
+@router.post("/plan/ai-generate")
+async def ai_generate_plan(req: dict):
+    """Generate a workout plan using LLM based on user profile and request."""
+    profile = req.get("profile", {})
+    user_request = req.get("user_request", "")
+
+    if not user_request:
+        return {"error": "请描述你的训练需求（例如：我想练腿，30分钟，中等强度）"}
+
+    # Load API config
+    config = load_api_config()
+    if not config.get("use_remote") or not config.get("api_key"):
+        return {"error": "AI计划生成需要配置 DashScope API，请在 data/api_config.json 中设置"}
+
+    # Build prompts
+    liked = ", ".join(profile.get("liked_exercises", [])) or "无偏好"
+    disliked = ", ".join(profile.get("disliked_exercises", [])) or "无"
+    injury = profile.get("injury_history", "") or "无"
+
+    goal_map = {
+        "strength": "增肌", "hypertrophy": "增肌塑形",
+        "endurance": "耐力", "weight_loss": "减脂", "general": "综合健康",
+    }
+    level_map_cn = {"beginner": "新手", "intermediate": "中级", "advanced": "高级"}
+
+    user_prompt = PLAN_AI_USER_TEMPLATE.format(
+        age=profile.get("age", 25),
+        height_cm=profile.get("height_cm", 170),
+        weight_kg=profile.get("weight_kg", 70),
+        goal=goal_map.get(profile.get("goal", "general"), "综合"),
+        fitness_level=level_map_cn.get(profile.get("fitness_level", "beginner"), "新手"),
+        training_days_per_week=profile.get("training_days_per_week", 3),
+        injury_history=injury,
+        liked_exercises=liked,
+        disliked_exercises=disliked,
+        user_request=user_request,
+    )
+
+    try:
+        from openai import OpenAI
+
+        def _call_api():
+            client = OpenAI(
+                api_key=config["api_key"],
+                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            )
+            completion = client.chat.completions.create(
+                model=config.get("model_code", "qwen-plus"),
+                messages=[
+                    {"role": "system", "content": PLAN_AI_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.7,
+                max_tokens=1500,
+            )
+            return completion.choices[0].message.content
+
+        import asyncio
+        reply = await asyncio.get_event_loop().run_in_executor(None, _call_api)
+
+        # Parse JSON from LLM response (handle markdown code fences)
+        reply_clean = reply.strip()
+        if reply_clean.startswith("```"):
+            lines = reply_clean.split("\n")
+            # Remove first line (```json or ```) and last line (```)
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            reply_clean = "\n".join(lines)
+
+        import json as _json
+        plan = _json.loads(reply_clean)
+
+        # Validate exercise names
+        valid_exercises = set(EXERCISE_LIST)
+        all_steps = list(plan.get("warmup", []))
+        for block in plan.get("blocks", []):
+            all_steps.extend(block.get("exercises", []))
+        all_steps.extend(plan.get("cooldown", []))
+
+        for step in all_steps:
+            ex_name = step.get("exercise", "")
+            if ex_name not in valid_exercises:
+                step["exercise"] = "深蹲"  # fallback
+
+        return {"plan": plan}
+
+    except _json.JSONDecodeError:
+        return {"error": "AI 生成的计划格式有误，请重试", "raw": reply_clean[:500]}
+    except Exception as e:
+        return {"error": f"AI 计划生成失败: {str(e)}"}

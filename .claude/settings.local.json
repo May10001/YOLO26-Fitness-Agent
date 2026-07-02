@@ -27,7 +27,8 @@
       "Bash(python -c \"from code.langgraph_agent import CoachAgent, CoachAgentState, create_coach_graph; print\\('All imports OK'\\); print\\(f'State fields: {list\\(CoachAgentState.__annotations__.keys\\(\\)\\)}'\\)\")",
       "Bash(python -m code.langgraph_agent.agent)",
       "Bash(npx vue-tsc *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(python -c \"from backend.config import load_api_config; print\\('config OK:', load_api_config\\(\\)\\)\")"
     ]
   }
 }

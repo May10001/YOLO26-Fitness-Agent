@@ -65,6 +65,10 @@ class UserProfile:
     fitness_level: FitnessLevel = FitnessLevel.BEGINNER
     goal: FitnessGoal = FitnessGoal.GENERAL
     equipment: Equipment = Equipment.MAT
+    injury_history: str = ""
+    liked_exercises: list[str] = field(default_factory=list)
+    disliked_exercises: list[str] = field(default_factory=list)
+    training_days_per_week: int = 3
     medical_notes: str = ""
     exercise_history: dict[str, ExerciseRecord] = field(default_factory=dict)
     created_date: str = field(default_factory=lambda: datetime.now().isoformat()[:10])
@@ -87,6 +91,10 @@ class UserProfile:
         result["fitness_level"] = self.fitness_level.value
         result["goal"] = self.goal.value
         result["equipment"] = self.equipment.value
+        result["injury_history"] = self.injury_history
+        result["liked_exercises"] = self.liked_exercises
+        result["disliked_exercises"] = self.disliked_exercises
+        result["training_days_per_week"] = self.training_days_per_week
         result["medical_notes"] = self.medical_notes
         result["exercise_history"] = {
             k: asdict(v) for k, v in self.exercise_history.items()

@@ -46,7 +46,7 @@ python scripts/test_remote_api.py -m
 
 | 设置项 | 值 |
 |--------|-----|
-| API Key | `sk-427b5295e2884e1183491ee9ab8b5e16` |
+| API Key | `sk-your-dashscope-api-key` |
 | 模型 Code | `qwen2.5-7b-instruct-d1a1cabf17c2-yzqr` |
 
 状态栏显示 **「7B 远程 API 就绪」** 即配置成功。

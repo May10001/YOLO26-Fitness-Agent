@@ -10,7 +10,7 @@ from .routers.detect import router as detect_router
 from .routers.chat import router as chat_router
 from .routers.config import router as config_router
 
-app = FastAPI(title="YOLO26 Fitness API")
+app = FastAPI(title="ForMAI API")
 
 app.add_middleware(
     CORSMiddleware,

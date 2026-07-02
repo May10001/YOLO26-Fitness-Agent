@@ -30,6 +30,7 @@ export const config = {
     profile: `${API_BASE}/api/profile`,
     profileLoad: (name: string) => `${API_BASE}/api/profile/${name}`,
     planGenerate: `${API_BASE}/api/plan/generate`,
+    aiPlanGenerate: `${API_BASE}/api/plan/ai-generate`,
     configScoring: `${API_BASE}/api/config/scoring`,
   },
 }

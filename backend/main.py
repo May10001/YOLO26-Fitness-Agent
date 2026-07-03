@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .routers.detect import router as detect_router
 from .routers.chat import router as chat_router
 from .routers.config import router as config_router
+from .routers.rag import router as rag_router
 
 app = FastAPI(title="ForMAI API")
 
@@ -23,6 +24,7 @@ app.add_middleware(
 app.include_router(detect_router)
 app.include_router(chat_router)
 app.include_router(config_router)
+app.include_router(rag_router)
 
 
 @app.get("/api/health")

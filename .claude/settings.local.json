@@ -28,7 +28,8 @@
       "Bash(python -m code.langgraph_agent.agent)",
       "Bash(npx vue-tsc *)",
       "Bash(npx vite *)",
-      "Bash(python -c \"from backend.config import load_api_config; print\\('config OK:', load_api_config\\(\\)\\)\")"
+      "Bash(python -c \"from backend.config import load_api_config; print\\('config OK:', load_api_config\\(\\)\\)\")",
+      "Bash(python -c \"from backend.routers.rag import router; from backend.rag.engine import build_index; build_index\\(\\); print\\('OK'\\)\")"
     ]
   }
 }

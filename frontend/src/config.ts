@@ -32,5 +32,6 @@ export const config = {
     planGenerate: `${API_BASE}/api/plan/generate`,
     aiPlanGenerate: `${API_BASE}/api/plan/ai-generate`,
     configScoring: `${API_BASE}/api/config/scoring`,
+    ragQuery: `${API_BASE}/api/rag/query`,
   },
 }

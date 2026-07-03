@@ -93,6 +93,7 @@
       <AiCoach v-if="activeTab === 'coach'"
                :pose-context="poseContext"
                :coach-message="ws.lastCoachMessage.value" />
+      <FitnessQA v-else-if="activeTab === 'qa'" />
       <HistoryPanel v-else-if="activeTab === 'history'" />
       <template v-else-if="activeTab === 'plan'">
         <ProfilePage ref="profilePageRef" />
@@ -134,6 +135,7 @@ import TrainingSummary from './components/TrainingSummary.vue'
 import ProfilePage from './components/ProfilePage.vue'
 import AIPlanGenerator from './components/AIPlanGenerator.vue'
 import PlanRunner from './components/PlanRunner.vue'
+import FitnessQA from './components/FitnessQA.vue'
 
 const camera = useCamera()
 const ws = useWebSocket()
@@ -153,7 +155,7 @@ function onKeyDown(e: KeyboardEvent) {
 onMounted(() => { fetchExercises(); window.addEventListener('keydown', onKeyDown) })
 onUnmounted(() => { stopFrameLoop(); camera.stop(); ws.disconnect(); window.removeEventListener('keydown', onKeyDown) })
 
-const tabs = [{ key: 'coach', label: 'AI教练' }, { key: 'history', label: '历史' }, { key: 'plan', label: '计划' }]
+const tabs = [{ key: 'coach', label: 'AI教练' }, { key: 'qa', label: '问答' }, { key: 'history', label: '历史' }, { key: 'plan', label: '计划' }]
 const activeTab = ref('coach')
 
 const exercises = ref<string[]>(['深蹲', '俯卧撑', '平板支撑', '卷腹', '开合跳'])

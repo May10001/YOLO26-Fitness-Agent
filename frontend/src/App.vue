@@ -5,15 +5,18 @@
   <div
     class="fixed top-3 right-3 z-40 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[9px] border transition-all duration-500"
     :class="backendOnline
-      ? 'bg-paper border-concrete text-obsidian'
-      : 'bg-paper border-danger/40 text-danger'"
+      ? 'bg-[#111] border-white/10 text-white'
+      : 'bg-[#111] border-danger/40 text-danger'"
     :title="backendOnline ? '后端已连接' : '后端未响应 — 检查 uvicorn 是否启动'"
   >
     <span class="w-1.5 h-1.5 rounded-full" :class="backendOnline ? 'bg-success' : 'bg-danger'" />
     {{ backendOnline ? 'API 在线' : 'API 离线' }}
   </div>
 
-  <div class="relative z-10 h-screen w-screen p-3 flex gap-3 bg-paper">
+  <!-- Brand logo (top-left) -->
+  <img src="/assets/logo.png" alt="ForMAI" class="fixed top-3 left-3 z-40 h-7 w-auto opacity-80 hover:opacity-100 transition-opacity" />
+
+  <div class="relative z-10 h-screen w-screen p-3 flex gap-3 bg-[#05080C]">
     <div class="flex-[2.2] flex flex-col gap-3">
       <div class="flex-[3] flex gap-3 relative">
         <VideoStage
@@ -83,34 +86,117 @@
         :score="currentScore"
       />
 
-      <!-- Tab switcher (Nike pill tabs) -->
+      <!-- Action buttons -->
       <div class="flex gap-1.5">
-        <button v-for="tab in tabs" :key="tab.key"
-                class="flex-1 text-[10px] py-1.5 rounded-full font-medium border transition-colors"
-                :class="activeTab === tab.key
-                  ? 'bg-obsidian text-paper border-obsidian'
-                  : 'bg-transparent text-steel border-concrete hover:text-obsidian'"
-                @click="activeTab = tab.key">
-          {{ tab.label }}
+        <button @click="modalCoach = true"
+                class="flex-1 text-[10px] py-1.5 rounded-md font-medium border transition-colors bg-accent/10 border-accent/30 text-accent hover:bg-accent/20">
+          AI教练
+        </button>
+        <button @click="modalQA = true"
+                class="flex-1 text-[10px] py-1.5 rounded-md font-medium border transition-colors bg-white/[0.02] border-white/[0.08] text-steel hover:text-white hover:border-white/20">
+          问答
+        </button>
+        <button @click="modalHistory = true"
+                class="flex-1 text-[10px] py-1.5 rounded-md font-medium border transition-colors bg-white/[0.02] border-white/[0.08] text-steel hover:text-white hover:border-white/20">
+          历史
+        </button>
+        <button @click="modalPlan = true"
+                class="flex-1 text-[10px] py-1.5 rounded-md font-medium border transition-colors bg-white/[0.02] border-white/[0.08] text-steel hover:text-white hover:border-white/20">
+          计划
         </button>
       </div>
 
-      <!-- Tab content -->
-      <AiCoach v-if="activeTab === 'coach'"
-               :pose-context="poseContext"
-               :coach-message="ws.lastCoachMessage.value"
-               :cue-tracking="cueTracking" />
-      <FitnessQA v-else-if="activeTab === 'qa'" />
-      <HistoryPanel v-else-if="activeTab === 'history'" />
-      <template v-else-if="activeTab === 'plan'">
-        <ProfilePage ref="profilePageRef" />
-        <AIPlanGenerator
-          :profile="profileData"
-          @start="onPlanStart"
-        />
-      </template>
+      <!-- Utility panel (bottom-right) -->
+      <div class="mt-auto flex items-center gap-2 px-1">
+        <!-- Sound toggle -->
+        <button @click="soundOn = !soundOn"
+                class="flex items-center gap-1 px-2 py-1 rounded-md text-[9px] border transition-colors"
+                :class="soundOn
+                  ? 'bg-accent/10 border-accent/30 text-accent'
+                  : 'bg-white/[0.02] border-white/[0.06] text-faint'"
+                :title="soundOn ? '音效已开启' : '音效已关闭'">
+          {{ soundOn ? '🔊' : '🔇' }}
+        </button>
+        <!-- FPS display -->
+        <span class="text-[9px] text-faint ml-auto" title="实时帧率">
+          {{ fps }} FPS
+        </span>
+        <!-- Session time -->
+        <span class="text-[9px] text-faint" title="训练时长">
+          {{ training.formattedTime.value }}
+        </span>
+      </div>
     </div>
   </div>
+
+  <!-- ============================================================
+       Modal overlays
+       ============================================================ -->
+
+  <!-- AI Coach modal -->
+  <Transition name="modal">
+    <div v-if="modalCoach" class="modal-backdrop" @click.self="modalCoach = false">
+      <div class="modal-panel modal-wide">
+        <div class="modal-header">
+          <span class="text-xs font-semibold text-accent uppercase tracking-wider">AI 教练</span>
+          <button @click="modalCoach = false" class="text-steel hover:text-white text-lg leading-none">&times;</button>
+        </div>
+        <AiCoach
+          :pose-context="poseContext"
+          :coach-message="ws.lastCoachMessage.value"
+          :cue-tracking="cueTracking"
+          :initial-messages="coachHistory"
+          @update-history="saveCoachHistory"
+        />
+      </div>
+    </div>
+  </Transition>
+
+  <!-- Fitness QA modal -->
+  <Transition name="modal">
+    <div v-if="modalQA" class="modal-backdrop" @click.self="modalQA = false">
+      <div class="modal-panel modal-wide">
+        <div class="modal-header">
+          <span class="text-xs font-semibold text-accent uppercase tracking-wider">知识问答</span>
+          <button @click="modalQA = false" class="text-steel hover:text-white text-lg leading-none">&times;</button>
+        </div>
+        <FitnessQA :initial-messages="qaHistory" @update-history="saveQAHistory" />
+      </div>
+    </div>
+  </Transition>
+
+  <!-- History modal -->
+  <Transition name="modal">
+    <div v-if="modalHistory" class="modal-backdrop" @click.self="modalHistory = false">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <span class="text-xs font-semibold text-accent uppercase tracking-wider">训练历史</span>
+          <button @click="modalHistory = false" class="text-steel hover:text-white text-lg leading-none">&times;</button>
+        </div>
+        <HistoryPanel />
+      </div>
+    </div>
+  </Transition>
+
+  <!-- Plan modal -->
+  <Transition name="modal">
+    <div v-if="modalPlan" class="modal-backdrop" @click.self="modalPlan = false">
+      <div class="modal-panel modal-wide max-h-[90vh] overflow-y-auto">
+        <div class="modal-header">
+          <span class="text-xs font-semibold text-accent uppercase tracking-wider">计划 & 画像</span>
+          <button @click="modalPlan = false" class="text-steel hover:text-white text-lg leading-none">&times;</button>
+        </div>
+        <ProfilePage ref="profilePageRef" />
+        <div class="my-3 border-t border-white/6"></div>
+        <CustomPlanBuilder @start="onPlanStart; modalPlan = false" />
+        <div class="my-3 border-t border-white/6"></div>
+        <AIPlanGenerator
+          :profile="profileData"
+          @start="onPlanStart; modalPlan = false"
+        />
+      </div>
+    </div>
+  </Transition>
 
   <!-- Training summary overlay -->
   <TrainingSummary
@@ -122,7 +208,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import type { ScoreData, PoseContext, SummaryData, ErrorSummary, PlanStep, CueTrackingData } from './types'
+import type { ScoreData, PoseContext, SummaryData, ErrorSummary, PlanStep, CueTrackingData, KeyFrame } from './types'
 import { config } from './config'
 import { useCamera } from './composables/useCamera'
 import { useWebSocket } from './composables/useWebSocket'
@@ -140,10 +226,14 @@ import ProfilePage from './components/ProfilePage.vue'
 import AIPlanGenerator from './components/AIPlanGenerator.vue'
 import PlanRunner from './components/PlanRunner.vue'
 import FitnessQA from './components/FitnessQA.vue'
+import CustomPlanBuilder from './components/CustomPlanBuilder.vue'
+import { useSound } from './composables/useSound'
 
 const camera = useCamera()
 const ws = useWebSocket()
 const training = useTrainingState()
+const sfx = useSound()
+const soundOn = ref(true)  // sound toggle
 
 const showEntry = ref(true)
 const showDebug = ref(false)
@@ -153,6 +243,14 @@ function onKeyDown(e: KeyboardEvent) {
   if (e.key === 'd' || e.key === 'D') {
     const tag = (e.target as HTMLElement)?.tagName
     if (tag !== 'INPUT' && tag !== 'TEXTAREA') toggleDebug()
+  }
+}
+
+// ---- Global button click sound ----
+function onGlobalClick(e: MouseEvent) {
+  const el = e.target as HTMLElement
+  if (el.closest('button') && soundOn.value) {
+    sfx.play('click')
   }
 }
 
@@ -172,17 +270,40 @@ async function checkHealth() {
 onMounted(() => {
   fetchExercises()
   window.addEventListener('keydown', onKeyDown)
+  document.addEventListener('click', onGlobalClick)
+  sfx.ensurePreload()
   checkHealth()
-  healthTimer = window.setInterval(checkHealth, 15000)  // every 15s
+  healthTimer = window.setInterval(checkHealth, 15000)
 })
 onUnmounted(() => {
   stopFrameLoop(); camera.stop(); ws.disconnect()
   window.removeEventListener('keydown', onKeyDown)
+  document.removeEventListener('click', onGlobalClick)
   if (healthTimer) clearInterval(healthTimer)
 })
 
-const tabs = [{ key: 'coach', label: 'AI教练' }, { key: 'qa', label: '问答' }, { key: 'history', label: '历史' }, { key: 'plan', label: '计划' }]
-const activeTab = ref('coach')
+// Modal visibility
+const modalCoach = ref(false)
+const modalQA = ref(false)
+const modalHistory = ref(false)
+const modalPlan = ref(false)
+
+// Chat history persistence (localStorage)
+const COACH_HISTORY_KEY = 'formai_coach_history'
+const QA_HISTORY_KEY = 'formai_qa_history'
+
+function loadHistory(key: string): any[] {
+  try { return JSON.parse(localStorage.getItem(key) || '[]') } catch { return [] }
+}
+function saveHistory(key: string, messages: any[]) {
+  try { localStorage.setItem(key, JSON.stringify(messages.slice(-50))) } catch {}
+}
+
+const coachHistory = ref<any[]>(loadHistory(COACH_HISTORY_KEY))
+const qaHistory = ref<any[]>(loadHistory(QA_HISTORY_KEY))
+
+function saveCoachHistory(msgs: any[]) { coachHistory.value = msgs; saveHistory(COACH_HISTORY_KEY, msgs) }
+function saveQAHistory(msgs: any[]) { qaHistory.value = msgs; saveHistory(QA_HISTORY_KEY, msgs) }
 
 const exercises = ref<string[]>(['深蹲', '俯卧撑', '平板支撑', '卷腹', '开合跳'])
 const currentExercise = ref('深蹲')
@@ -203,6 +324,7 @@ const sessionErrors = ref<Map<string, ErrorSummary>>(new Map())
 const lastRepCount = ref(0)
 const countedInThisRep = ref<Set<string>>(new Set())
 const summarySnapshot = ref<SummaryData | null>(null)
+const sessionFrames = ref<KeyFrame[]>([])  // captured key frames
 
 // ---- Plan mode ----
 const planMode = ref(false)
@@ -252,28 +374,61 @@ const summaryData = computed<SummaryData>(() => {
   return { exercise: currentExercise.value, totalReps: 0, targetReps: 0, bestScore: 0, avgScore: 0, duration: '0:00', errors: [], finalScore: { total: 0, angle: 0, temporal: 0, symmetry: 0 } }
 })
 
-// ---- Watch score ----
+// ---- Watch score + capture highlight frames ----
 watch(() => ws.lastResult.value?.score?.total, (newTotal) => {
   if (newTotal !== undefined && newTotal > 0) {
+    if (newTotal > bestScore.value && bestScore.value > 0) {
+      // Personal best: capture highlight frame
+      if (sessionFrames.value.length < 12) {
+        const frame = camera.captureFrame()
+        if (frame) {
+          sessionFrames.value.push({
+            type: 'highlight',
+            label: `最佳 ${newTotal.toFixed(0)} 分`,
+            image: frame,
+            timestamp: new Date().toLocaleTimeString(),
+          })
+        }
+      }
+    }
     if (newTotal > bestScore.value) bestScore.value = newTotal
     recentScores.value.push(newTotal)
     if (recentScores.value.length > 30) recentScores.value.shift()
   }
 })
 
-// ---- Per-rep error counting ----
+// ---- Per-rep error counting + key frame capture ----
 watch(() => ws.lastResult.value?.errors, (errors) => {
   if (!errors || errors.length === 0) return
   const currentCount = ws.lastResult.value?.count || 0
   if (currentCount > lastRepCount.value) {
     lastRepCount.value = currentCount
     countedInThisRep.value = new Set()
+    // Rep complete sound
+    if (soundOn.value) sfx.play('succeed')
+    // Capture error frame (first error per rep)
+    let capturedThisRep = false
     for (const e of errors) {
       if (countedInThisRep.value.has(e.name)) continue
       countedInThisRep.value.add(e.name)
       const existing = sessionErrors.value.get(e.name)
       if (existing) { existing.count++ }
       else { sessionErrors.value.set(e.name, { name: e.name, count: 1, severity: e.severity, suggestion: e.suggestion }) }
+      // Capture key frame for first occurrence of each error type
+      if (!existing && sessionFrames.value.length < 12) {
+        const frame = camera.captureFrame()
+        if (frame) {
+          sessionFrames.value.push({
+            type: 'error',
+            label: e.name,
+            image: frame,
+            timestamp: new Date().toLocaleTimeString(),
+          })
+        }
+      }
+      if (!capturedThisRep && sessionFrames.value.length < 12) {
+        capturedThisRep = true
+      }
     }
   }
 })
@@ -402,11 +557,60 @@ function captureSummarySnapshot() {
     bestScore: bestScore.value, avgScore: avg, duration: training.formattedTime.value,
     errors: [...sessionErrors.value.values()],
     finalScore: r?.score || { total: 0, angle: 0, temporal: 0, symmetry: 0 },
+    frames: [...sessionFrames.value],
   }
 }
 
 function handleTarget(value: number) { targetReps.value = value; targetReached.value = false }
 function dismissSummary() { showSummary.value = false; targetReached.value = false }
+
+// Auto-save workout record when score >= 80
+async function autoSaveWorkoutRecord() {
+  const snap = summarySnapshot.value
+  if (!snap || snap.bestScore < 80) return
+  try {
+    const name = profileData.value.name || '用户'
+    // Load current profile
+    const loadRes = await fetch(config.endpoints.profileLoad(name))
+    if (!loadRes.ok) return
+    const prof = await loadRes.json()
+    // Build workout record
+    const record = {
+      date: new Date().toISOString().slice(0, 16),
+      exercise: snap.exercise,
+      total_reps: snap.totalReps,
+      best_score: snap.bestScore,
+      avg_score: Math.round(snap.avgScore),
+      duration: snap.duration,
+      errors: snap.errors,
+    }
+    // Append to history (keep last 30)
+    const history = prof.workout_history || []
+    history.unshift(record)
+    if (history.length > 30) history.length = 30
+    prof.workout_history = history
+    // Update pain points
+    const points = prof.pain_points || []
+    for (const err of snap.errors) {
+      const existing = points.find((p: any) => p.error_name === err.name)
+      if (existing) { existing.count += err.count; existing.last_seen = record.date }
+      else { points.push({ error_name: err.name, count: err.count, last_seen: record.date, suggestion: err.suggestion }) }
+    }
+    prof.pain_points = points
+    // Save back
+    await fetch(config.endpoints.profile, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prof),
+    })
+  } catch { /* non-critical */ }
+}
+
+// Play milestone sound and auto-save on summary
+watch(showSummary, (v) => {
+  if (v && soundOn.value) sfx.play('milestone')
+  if (v) autoSaveWorkoutRecord()
+})
 
 async function fetchExercises() {
   try {
@@ -423,7 +627,9 @@ async function fetchExercises() {
 function resetSessionStats() {
   bestScore.value = 0; recentScores.value = []
   sessionErrors.value = new Map(); lastRepCount.value = 0
-  countedInThisRep.value = new Set(); summarySnapshot.value = null; targetReached.value = false
+  countedInThisRep.value = new Set(); summarySnapshot.value = null
+  sessionFrames.value = []
+  targetReached.value = false
 }
 
 async function beginSession() {

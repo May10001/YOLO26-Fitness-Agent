@@ -5,9 +5,9 @@
       <span class="text-[10px] text-steel">第 {{ count }} 次</span>
     </div>
     <div class="flex gap-3 justify-center mb-3">
-      <RingGauge :value="score.angle" :max="40" label="角度" color="#111111" />
-      <RingGauge :value="score.temporal" :max="30" label="时序" color="#111111" />
-      <RingGauge :value="score.symmetry" :max="30" label="对称" color="#111111" />
+      <RingGauge :value="score.angle" :max="40" label="角度" />
+      <RingGauge :value="score.temporal" :max="30" label="时序" />
+      <RingGauge :value="score.symmetry" :max="30" label="对称" />
     </div>
     <div class="grid grid-cols-3 gap-1.5">
       <div v-if="isHoldExercise"

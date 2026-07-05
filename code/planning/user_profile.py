@@ -69,6 +69,8 @@ class UserProfile:
     liked_exercises: list[str] = field(default_factory=list)
     disliked_exercises: list[str] = field(default_factory=list)
     training_days_per_week: int = 3
+    pain_points: list[dict] = field(default_factory=list)
+    workout_history: list[dict] = field(default_factory=list)
     medical_notes: str = ""
     exercise_history: dict[str, ExerciseRecord] = field(default_factory=dict)
     created_date: str = field(default_factory=lambda: datetime.now().isoformat()[:10])
@@ -95,6 +97,8 @@ class UserProfile:
         result["liked_exercises"] = self.liked_exercises
         result["disliked_exercises"] = self.disliked_exercises
         result["training_days_per_week"] = self.training_days_per_week
+        result["pain_points"] = self.pain_points
+        result["workout_history"] = self.workout_history
         result["medical_notes"] = self.medical_notes
         result["exercise_history"] = {
             k: asdict(v) for k, v in self.exercise_history.items()

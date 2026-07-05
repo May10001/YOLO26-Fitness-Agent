@@ -5,23 +5,23 @@
         <!-- Header -->
         <div class="text-center mb-7">
           <div class="text-[10px] uppercase tracking-[6px] text-steel mb-2">Training Complete</div>
-          <div class="text-2xl font-display font-semibold text-obsidian">{{ data.exercise }}</div>
+          <div class="text-2xl font-display font-semibold text-white">{{ data.exercise }}</div>
           <div class="text-sm text-steel mt-1">{{ data.duration }}</div>
         </div>
 
         <!-- Core stats grid -->
         <div class="grid grid-cols-3 gap-3 mb-7">
           <div class="mist-card p-4 text-center">
-            <div class="text-4xl font-display font-semibold text-obsidian">{{ data.totalReps }}</div>
+            <div class="text-4xl font-display font-semibold text-white">{{ data.totalReps }}</div>
             <div class="text-[9px] text-steel mt-1.5 uppercase tracking-[2px]">总次数</div>
             <div v-if="data.targetReps > 0" class="text-[10px] text-faint mt-0.5">目标 {{ data.targetReps }}</div>
           </div>
           <div class="mist-card p-4 text-center">
-            <div class="text-4xl font-display font-semibold text-obsidian">{{ data.bestScore.toFixed(0) }}</div>
+            <div class="text-4xl font-display font-semibold text-white">{{ data.bestScore.toFixed(0) }}</div>
             <div class="text-[9px] text-steel mt-1.5 uppercase tracking-[2px]">最佳得分</div>
           </div>
           <div class="mist-card p-4 text-center">
-            <div class="text-4xl font-display font-semibold text-obsidian">{{ data.avgScore.toFixed(0) }}</div>
+            <div class="text-4xl font-display font-semibold text-white">{{ data.avgScore.toFixed(0) }}</div>
             <div class="text-[9px] text-steel mt-1.5 uppercase tracking-[2px]">平均得分</div>
           </div>
         </div>
@@ -33,29 +33,47 @@
             <div class="flex items-center gap-3">
               <span class="w-10 text-[10px] text-steel text-right">角度</span>
               <div class="flex-1 h-2.5 rounded-full bg-concrete overflow-hidden">
-                <div class="h-full rounded-full bg-obsidian transition-all duration-700"
+                <div class="h-full rounded-full bg-flame transition-all duration-700"
                      :style="{ width: (data.finalScore.angle / 40 * 100) + '%' }" />
               </div>
-              <span class="w-8 text-[10px] text-obsidian text-right font-medium">{{ data.finalScore.angle.toFixed(0) }}</span>
+              <span class="w-8 text-[10px] text-white text-right font-medium">{{ data.finalScore.angle.toFixed(0) }}</span>
               <span class="text-[9px] text-faint">/40</span>
             </div>
             <div class="flex items-center gap-3">
               <span class="w-10 text-[10px] text-steel text-right">时序</span>
               <div class="flex-1 h-2.5 rounded-full bg-concrete overflow-hidden">
-                <div class="h-full rounded-full bg-obsidian transition-all duration-700"
+                <div class="h-full rounded-full bg-flame transition-all duration-700"
                      :style="{ width: (data.finalScore.temporal / 30 * 100) + '%' }" />
               </div>
-              <span class="w-8 text-[10px] text-obsidian text-right font-medium">{{ data.finalScore.temporal.toFixed(0) }}</span>
+              <span class="w-8 text-[10px] text-white text-right font-medium">{{ data.finalScore.temporal.toFixed(0) }}</span>
               <span class="text-[9px] text-faint">/30</span>
             </div>
             <div class="flex items-center gap-3">
               <span class="w-10 text-[10px] text-steel text-right">对称</span>
               <div class="flex-1 h-2.5 rounded-full bg-concrete overflow-hidden">
-                <div class="h-full rounded-full bg-obsidian transition-all duration-700"
+                <div class="h-full rounded-full bg-flame transition-all duration-700"
                      :style="{ width: (data.finalScore.symmetry / 30 * 100) + '%' }" />
               </div>
-              <span class="w-8 text-[10px] text-obsidian text-right font-medium">{{ data.finalScore.symmetry.toFixed(0) }}</span>
+              <span class="w-8 text-[10px] text-white text-right font-medium">{{ data.finalScore.symmetry.toFixed(0) }}</span>
               <span class="text-[9px] text-faint">/30</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Key frames gallery -->
+        <div v-if="data.frames && data.frames.length > 0" class="mb-7">
+          <div class="text-[10px] text-steel uppercase tracking-[3px] mb-3">关键画面 ({{ data.frames.length }})</div>
+          <div class="grid grid-cols-3 gap-2">
+            <div v-for="(f, fi) in data.frames" :key="fi"
+                 class="relative bg-mist border border-concrete overflow-hidden group">
+              <img :src="'data:image/jpeg;base64,' + f.image"
+                   class="w-full h-28 object-cover" />
+              <div class="absolute bottom-0 left-0 right-0 px-2 py-1 text-[8px] font-medium"
+                   :class="f.type === 'error'
+                     ? 'bg-red-500/80 text-white'
+                     : 'bg-emerald-500/80 text-white'">
+                {{ f.type === 'error' ? '⚠' : '⭐' }} {{ f.label }}
+              </div>
             </div>
           </div>
         </div>
@@ -70,10 +88,10 @@
                    ? 'bg-red-500/[0.06] border-red-500/30'
                    : 'bg-mist border-concrete'">
               <span class="text-xl font-display font-semibold w-7 text-center"
-                    :class="i === 0 ? 'text-obsidian' : 'text-faint'">{{ i + 1 }}</span>
+                    :class="i === 0 ? 'text-white' : 'text-faint'">{{ i + 1 }}</span>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                  <span class="text-sm font-medium text-obsidian">{{ err.name }}</span>
+                  <span class="text-sm font-medium text-white">{{ err.name }}</span>
                   <span class="px-1.5 py-0.5 rounded text-[9px] font-medium"
                         :class="err.severity >= 3
                           ? 'bg-red-500/15 text-red-500'

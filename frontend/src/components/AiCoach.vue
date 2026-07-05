@@ -118,7 +118,10 @@ const props = defineProps<{
   poseContext?: PoseContext
   coachMessage?: CoachMessage | null
   cueTracking?: CueTrackingData | null
+  initialMessages?: Message[]
 }>()
+
+const emit = defineEmits<{ (e: 'updateHistory', msgs: Message[]): void }>()
 
 const hasActiveCueTracking = computed(() => {
   const ct = props.cueTracking
@@ -135,11 +138,16 @@ interface Message {
   showDiagnosis?: boolean
 }
 
-const messages = ref<Message[]>([
-  { role: 'ai', text: '你好！我是你的AI健身教练，有什么可以帮你的？' }
-])
+const messages = ref<Message[]>(
+  (props.initialMessages && props.initialMessages.length > 0)
+    ? props.initialMessages
+    : [{ role: 'ai', text: '你好！我是你的AI健身教练，有什么可以帮你的？' }]
+)
 const input = ref('')
 const messagesRef = ref<HTMLElement | null>(null)
+
+// Emit history on every message change
+watch(messages, (msgs) => emit('updateHistory', [...msgs]), { deep: true })
 
 // Watch for proactive coach pushes from backend WebSocket
 watch(() => props.coachMessage, (msg) => {

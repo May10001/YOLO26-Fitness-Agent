@@ -204,6 +204,27 @@ export interface UserProfile {
   liked_exercises?: string[]
   disliked_exercises?: string[]
   training_days_per_week?: number
+  pain_points?: PainPoint[]
+  workout_history?: WorkoutRecord[]
+}
+
+/** One completed workout record saved to user profile. */
+export interface WorkoutRecord {
+  date: string
+  exercise: string
+  total_reps: number
+  best_score: number
+  avg_score: number
+  duration: string
+  errors: ErrorSummary[]
+}
+
+/** Recurring pain point tracked across sessions. */
+export interface PainPoint {
+  error_name: string
+  count: number
+  last_seen: string
+  suggestion: string
 }
 
 /** One step in an AI-generated workout plan. */
@@ -267,6 +288,14 @@ export interface ErrorSummary {
   suggestion: string
 }
 
+/** A captured key frame (error onset or highlight moment). */
+export interface KeyFrame {
+  type: 'error' | 'highlight'
+  label: string
+  image: string   // base64 JPEG
+  timestamp: string
+}
+
 /** Data for the post-set training summary panel. */
 export interface SummaryData {
   exercise: string
@@ -277,4 +306,5 @@ export interface SummaryData {
   duration: string
   errors: ErrorSummary[]
   finalScore: ScoreData
+  frames?: KeyFrame[]
 }

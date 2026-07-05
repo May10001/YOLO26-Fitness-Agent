@@ -43,7 +43,7 @@
     <div class="flex gap-1.5 mb-6">
       <div v-for="(s, i) in steps" :key="i"
            class="w-1.5 h-1.5 rounded-full transition-all duration-300"
-           :class="i < stepIndex ? 'bg-paper' : i === stepIndex ? 'bg-paper scale-150' : 'bg-white/[0.25]'" />
+           :class="i < stepIndex ? 'bg-flame' : i === stepIndex ? 'bg-white scale-150' : 'bg-white/[0.2]'" />
     </div>
 
     <div class="text-[9px] text-paper/50 mb-6">步骤 {{ stepIndex + 1 }} / {{ totalSteps }}</div>

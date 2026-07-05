@@ -48,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, watch } from 'vue'
 import { config } from '../config'
 
 interface Message {
@@ -57,10 +57,15 @@ interface Message {
   sources?: { source: string; snippet: string }[]
 }
 
-const messages = ref<Message[]>([])
+const props = defineProps<{ initialMessages?: Message[] }>()
+const emit = defineEmits<{ (e: 'updateHistory', msgs: Message[]): void }>()
+
+const messages = ref<Message[]>(props.initialMessages || [])
 const question = ref('')
 const loading = ref(false)
 const msgList = ref<HTMLElement | null>(null)
+
+watch(messages, (msgs) => emit('updateHistory', [...msgs]), { deep: true })
 
 async function ask() {
   const q = question.value.trim()

@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-none overflow-hidden relative bg-obsidian border border-concrete transition-all duration-500">
+  <div class="rounded-2xl overflow-hidden relative bg-[#0a0a0a] border border-white/10 transition-all duration-500">
     <video ref="videoEl" class="absolute inset-0 w-full h-full object-cover" muted playsinline />
 
     <!-- Skeleton overlay: hidden by default; errors-only when errors present; full when debug on -->
@@ -39,12 +39,37 @@
       </div>
     </div>
 
-    <!-- Bottom: big rep counter -->
-    <div v-if="isRunning && !isHoldExercise" class="absolute bottom-20 left-1/2 -translate-x-1/2 text-center z-10">
-      <div class="text-6xl font-display font-semibold text-paper leading-none tabular-nums">
-        {{ result?.count || 0 }}<span v-if="targetReps > 0" class="text-2xl text-paper/50"> / {{ targetReps }}</span>
+    <!-- Bottom: rep ring counter (green arc fill) -->
+    <div v-if="isRunning && !isHoldExercise" class="absolute bottom-16 left-1/2 -translate-x-1/2 z-10">
+      <div class="relative w-36 h-36">
+        <!-- Ring SVG -->
+        <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
+          <!-- Track -->
+          <circle cx="50" cy="50" r="42" fill="none"
+                  stroke="rgba(255,255,255,0.06)" stroke-width="5" />
+          <!-- Green fill arc -->
+          <circle v-if="targetReps > 0" cx="50" cy="50" r="42" fill="none"
+                  stroke="#38D6B2" stroke-width="5" stroke-linecap="round"
+                  :stroke-dasharray="ringCircumference"
+                  :stroke-dashoffset="ringOffset"
+                  class="rep-ring transition-all duration-500" />
+          <!-- Full ring when no target (pulsing green) -->
+          <circle v-else cx="50" cy="50" r="42" fill="none"
+                  stroke="#38D6B2" stroke-width="5" stroke-linecap="round"
+                  stroke-dasharray="264" :stroke-dashoffset="ringPulseOffset"
+                  class="rep-ring transition-all duration-300" />
+        </svg>
+        <!-- Center text -->
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <div class="text-4xl font-display font-bold text-white leading-none tabular-nums">
+            {{ result?.count || 0 }}
+          </div>
+          <div v-if="targetReps > 0" class="text-[10px] text-gray-500 mt-0.5">
+            / {{ targetReps }}
+          </div>
+          <div class="text-[9px] text-gray-600 uppercase tracking-[3px] mt-0.5">REPS</div>
+        </div>
       </div>
-      <div class="text-[10px] text-paper/60 uppercase tracking-[4px] mt-1">REPS</div>
     </div>
 
     <!-- Bottom: hold time for static exercises -->
@@ -89,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import type { DetectionResult, ScoreData, GuidanceData } from '../types'
 import SkeletonOverlay from './SkeletonOverlay.vue'
 import DebugOverlay from './DebugOverlay.vue'
@@ -160,5 +185,36 @@ const guidanceBannerInner = computed(() => {
   return isNegativeGuidance.value
     ? 'bg-danger/90 text-paper border-danger'
     : 'bg-success/90 text-obsidian border-success'
+})
+
+// ---- Rep ring counter (green arc) ----
+const RING_RADIUS = 42
+const ringCircumference = computed(() => 2 * Math.PI * RING_RADIUS)
+
+const ringOffset = computed(() => {
+  const total = Math.max(props.targetReps || 1, 1)
+  const current = Math.min(props.result?.count || 0, total)
+  const ratio = current / total
+  return ringCircumference.value * (1 - ratio)
+})
+
+// Pulsing ring when no target set (breathing effect)
+const ringPulseOffset = ref(ringCircumference.value * 0.3)
+let pulseDir = 1
+let pulseTimer: number | null = null
+
+onMounted(() => {
+  pulseTimer = window.setInterval(() => {
+    const base = ringCircumference.value
+    let val = ringPulseOffset.value
+    val += pulseDir * base * 0.008
+    if (val <= base * 0.15) pulseDir = 1
+    if (val >= base * 0.5) pulseDir = -1
+    ringPulseOffset.value = val
+  }, 50)
+})
+
+onUnmounted(() => {
+  if (pulseTimer) clearInterval(pulseTimer)
 })
 </script>

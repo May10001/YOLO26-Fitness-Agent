@@ -2,7 +2,10 @@
   <div ref="scroller" class="entry-scroller" :class="{ leaving }">
     <!-- Fixed minimal nav (Nike: transparent, wordmark + pill CTA) -->
     <header class="entry-nav" :class="{ 'on-dark': navOnDark }">
-      <div class="entry-nav-mark font-display">ForMAI</div>
+      <div class="entry-nav-brand">
+        <img v-if="navOnDark" src="/assets/logo.png" alt="ForMAI" class="entry-nav-logo" />
+        <span class="entry-nav-mark font-display">ForMAI</span>
+      </div>
       <button class="entry-nav-cta" type="button" @click="onEnter">
         进入训练 <span class="arrow">↗</span>
       </button>
@@ -11,6 +14,10 @@
     <!-- ============ Section 1: Hero (dark) ============ -->
     <section class="sec sec-dark" data-nav="dark">
       <div class="sec-inner hero-inner">
+        <!-- Large rotating logo on dark background -->
+        <div class="hero-logo-wrap reveal">
+          <img src="/assets/logo.png" alt="ForMAI" class="hero-logo" />
+        </div>
         <div class="hero-eyebrow reveal">YOLO26 × QWEN2.5 · 实时动作诊断</div>
         <h1 class="hero-title font-display reveal">
           <span class="hero-line"><span class="hero-line-inner">你的专属</span></span>
@@ -252,6 +259,12 @@ onUnmounted(() => {
 }
 .entry-nav.on-dark { color: #fff; }
 .entry-nav:not(.on-dark) { color: #111; }
+.entry-nav-brand {
+  display: flex; align-items: center; gap: 12px;
+}
+.entry-nav-logo {
+  height: clamp(36px, 4vw, 52px); width: auto;
+}
 .entry-nav-mark {
   font-weight: 600; font-size: clamp(20px, 2.2vw, 26px);
   letter-spacing: .02em; text-transform: uppercase;
@@ -273,7 +286,7 @@ onUnmounted(() => {
   display: flex; align-items: center; justify-content: center;
   padding: 96px clamp(24px, 5vw, 60px);
 }
-.sec-dark { background: #111; color: #fff; }
+.sec-dark { background: #05080C; color: #F4F7F5; }
 .sec-light { background: #fff; color: #111; }
 .sec-inner { width: 100%; max-width: 1080px; }
 
@@ -283,6 +296,13 @@ onUnmounted(() => {
 
 /* ---- Hero ---- */
 .hero-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
+.hero-logo-wrap {
+  margin-bottom: clamp(20px, 3vw, 36px);
+}
+.hero-logo {
+  width: clamp(120px, 18vw, 200px); height: auto;
+  filter: drop-shadow(0 0 40px rgba(56,214,178,0.25));
+}
 .hero-eyebrow {
   font-size: clamp(11px, 1vw, 13px); font-weight: 500; letter-spacing: .28em;
   text-transform: uppercase; color: #9e9ea0; margin-bottom: clamp(24px, 4vw, 40px);
@@ -325,8 +345,8 @@ onUnmounted(() => {
 .stat-label { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #707072; margin-top: 8px; }
 
 /* ---- Score grid (dark) ---- */
-.score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #2a2a2a; margin-top: clamp(40px, 6vw, 64px); border: 1px solid #2a2a2a; }
-.score-cell { background: #111; padding: clamp(28px, 4vw, 44px) clamp(20px, 3vw, 32px); text-align: center; }
+.score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #1A3B48; margin-top: clamp(40px, 6vw, 64px); border: 1px solid #1A3B48; }
+.score-cell { background: #05080C; padding: clamp(28px, 4vw, 44px) clamp(20px, 3vw, 32px); text-align: center; }
 .score-num { font-weight: 600; font-size: clamp(56px, 9vw, 96px); line-height: 1; }
 .score-name { font-size: clamp(15px, 1.6vw, 19px); font-weight: 500; margin-top: 12px; }
 .score-desc { font-size: 13px; line-height: 1.5; color: #9e9ea0; margin-top: 10px; }
@@ -343,7 +363,7 @@ onUnmounted(() => {
 .kb-num .unit { font-size: .5em; color: #707072; }
 .kb-label { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #9e9ea0; margin-top: 12px; }
 .kb-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 28px; }
-.kb-tag { border: 1px solid #3a3a3a; border-radius: 30px; padding: 8px 18px; font-size: 13px; color: #d0d0d2; }
+.kb-tag { border: 1px solid #153A49; border-radius: 8px; padding: 8px 18px; font-size: 13px; color: #B7C3CD; background: rgba(56,214,178,0.06); }
 
 /* ---- CTA ---- */
 .cta-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }

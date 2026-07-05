@@ -3,28 +3,64 @@
 @tailwind utilities;
 
 :root {
-  /* Nike monochrome palette (DESIGN) */
-  --obsidian: #111111;
-  --paper: #ffffff;
-  --concrete: #e5e5e5;
-  --mist: #f5f5f5;
-  --steel: #707072;
-  --faint: #9e9ea0;
+  /* Background system (deep blue-black) */
+  --bg-deepest: #05080C;
+  --bg-deep: #071018;
+  --bg-mid: #0A151D;
+  --bg-card: #11171E;
+  --bg-card-alt: #141A22;
+  --bg-metric: #0C1116;
 
-  /* Functional colors (retained as the only chroma) */
-  --flame: #ff6a00;
-  --rose: #ee0979;
-  --success: #38ef7d;
-  --danger: #ff4d4d;
+  /* Primary accent: teal-green */
+  --accent: #38D6B2;
+  --accent-light: #4CE0B3;
+  --accent-soft: #7CE5D2;
+  --accent-bright: #2BE1BC;
 
-  /* Legacy aliases (some components still reference these) */
-  --bg: #ffffff;
-  --panel: #ffffff;
+  /* Secondary accents */
+  --blue: #6DB4FF;
+  --rose: #E05C7B;
+  --green: #7DD67A;
+  --amber: #F2AA4C;
+  --purple: #B78CFF;
+  --orange: #FF8D5C;
+
+  /* Text hierarchy */
+  --text-primary: #F4F7F5;
+  --text-bright: #FFFFFF;
+  --text-medium: #B7C3CD;
+  --text-muted: #8AA0AD;
+  --text-disabled: #65727E;
+  --text-faint: #4A5568;
+
+  /* Border colors */
+  --border-subtle: #1E2832;
+  --border-medium: #24303A;
+  --border-accent-tint: #153A49;
+  --border-accent: #174353;
+  --border-strong: #2A3541;
+
+  /* Functional */
+  --success: #38D6B2;
+  --danger: #E05C7B;
+  --warning: #F2AA4C;
+  --info: #6DB4FF;
+
+  /* Legacy compat aliases */
+  --flame: #38D6B2;
+  --obsidian: #F4F7F5;
+  --paper: #11171E;
+  --concrete: #24303A;
+  --mist: #0A151D;
+  --steel: #8AA0AD;
+  --faint: #65727E;
+  --bg: #05080C;
+  --panel: #11171E;
 }
 
 body {
-  background: var(--paper);
-  color: var(--obsidian);
+  background: var(--bg-deepest);
+  color: var(--text-primary);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
   margin: 0;
   overflow: hidden;
@@ -32,78 +68,118 @@ body {
 }
 
 /* ============================================================
-   Nike component primitives — flat, sharp-edged, no shadow
+   Card primitives
    ============================================================ */
 
-/* Flat card: white surface, 1px concrete hairline, no radius, no shadow */
 .flat-card {
-  background: var(--paper);
-  border: 1px solid var(--concrete);
-  border-radius: 0;
-  box-shadow: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
 }
 
-/* Soft-mist card variant for secondary surfaces */
 .mist-card {
-  background: var(--mist);
-  border: 1px solid var(--concrete);
-  border-radius: 0;
-  box-shadow: none;
+  background: var(--bg-metric);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
 }
 
-/* Pill button (primary): Obsidian fill, white text, 30px radius, no shadow */
+.glow-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-accent-tint);
+  border-radius: 8px;
+}
+
+.glow-card-strong {
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+
 .pill-btn {
-  background: var(--obsidian);
-  color: var(--paper);
-  border: 1px solid var(--obsidian);
-  border-radius: 30px;
+  background: var(--accent);
+  color: #07100E;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
   font-family: 'Inter', sans-serif;
-  font-weight: 500;
+  font-weight: 700;
   cursor: pointer;
-  transition: opacity 0.25s ease, background 0.25s ease, color 0.25s ease;
+  transition: background 0.25s ease;
 }
-.pill-btn:hover { opacity: 0.82; }
-.pill-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.pill-btn:hover { background: var(--accent-light); }
+.pill-btn:disabled { background: #202932; color: var(--text-disabled); border-color: var(--border-medium); cursor: not-allowed; }
 
-/* Pill button (invert): white fill, black text, black hairline */
 .pill-btn-invert {
-  background: var(--paper);
-  color: var(--obsidian);
-  border: 1px solid var(--obsidian);
-  border-radius: 30px;
-  font-family: 'Inter', sans-serif;
-  font-weight: 500;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.25s ease, color 0.25s ease;
+  transition: border-color 0.25s ease;
 }
-.pill-btn-invert:hover { background: var(--obsidian); color: var(--paper); }
+.pill-btn-invert:hover { border-color: var(--accent); }
 
-/* Pill tag (selectable chip): default outline, selected = filled black */
 .pill-tag {
-  border: 1px solid var(--concrete);
-  border-radius: 30px;
-  color: var(--steel);
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  color: var(--text-muted);
   background: transparent;
   cursor: pointer;
   transition: all 0.2s ease;
 }
-.pill-tag:hover { border-color: var(--steel); color: var(--obsidian); }
+.pill-tag:hover { border-color: var(--accent); color: var(--text-primary); }
+
 .pill-tag-active {
-  background: var(--obsidian);
-  border-color: var(--obsidian);
-  color: var(--paper);
+  background: rgba(56,214,178,0.15);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-/* Hairline divider */
-.hairline { border-color: var(--concrete); }
-
-/* Display font utility (Jost — Futura substitute for hero/large numbers) */
+.hairline { border-color: var(--border-subtle); }
 .font-display { font-family: 'Jost', 'Inter', sans-serif; }
 
-/* Gradient text retained for score emphasis (functional chroma) */
 .gradient-text {
-  background: linear-gradient(90deg, var(--flame), var(--rose));
+  background: linear-gradient(90deg, var(--accent), var(--accent-soft));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+/* ============================================================
+   Modal overlay system
+   ============================================================ */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5,8,12,0.85); backdrop-filter: blur(8px);
+}
+.modal-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-accent-tint);
+  border-radius: 10px;
+  padding: 24px;
+  width: 420px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
+}
+.modal-wide { width: 540px; }
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.modal-enter-active { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+.modal-leave-active { transition: all 0.2s ease-in; }
+.modal-enter-from { opacity: 0; }
+.modal-enter-from > div { transform: scale(0.94) translateY(12px); }
+.modal-leave-to { opacity: 0; }
+.modal-leave-to > div { transform: scale(0.96); }
+
+/* ============================================================
+   Rep ring counter (teal arc fill)
+   ============================================================ */
+.rep-ring {
+  filter: drop-shadow(0 0 10px rgba(56,214,178,0.5));
 }

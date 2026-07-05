@@ -29,7 +29,8 @@
       "Bash(npx vue-tsc *)",
       "Bash(npx vite *)",
       "Bash(python -c \"from backend.config import load_api_config; print\\('config OK:', load_api_config\\(\\)\\)\")",
-      "Bash(python -c \"from backend.routers.rag import router; from backend.rag.engine import build_index; build_index\\(\\); print\\('OK'\\)\")"
+      "Bash(python -c \"from backend.routers.rag import router; from backend.rag.engine import build_index; build_index\\(\\); print\\('OK'\\)\")",
+      "Bash(python -c \"from code.planning.user_profile import UserProfile; p=UserProfile\\(\\); d=p.to_dict\\(\\); print\\('pain_points' in d, 'ok'\\)\")"
     ]
   }
 }

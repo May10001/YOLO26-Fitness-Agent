@@ -446,8 +446,12 @@ class RealTimeCoach:
         self._user_initiated = False
 
     def evaluate_frame(self, analysis: AnalysisResult, state,
-                       exercise_name: str) -> Optional[str]:
-        """Called every frame. Returns context string if a trigger should fire."""
+                       exercise_name: str) -> Optional[TriggerEvent]:
+        """Called every frame. Returns the full TriggerEvent if one should fire.
+
+        The TriggerEvent contains both the context string (for the LLM) and
+        the trigger type (for the frontend to display the correct badge).
+        """
         if self._session_trigger_count >= self.MAX_PROACTIVE_PER_SESSION:
             return None
 
@@ -468,7 +472,7 @@ class RealTimeCoach:
         self._last_any_trigger_time = now
         self._session_trigger_count += 1
         self._user_initiated = False
-        return event.context
+        return event  # Return full event so caller can access .type and .context
 
     def build_chat_context(self, analysis: Optional[AnalysisResult], state,
                            exercise_name: str, user_message: str) -> str:

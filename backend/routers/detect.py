@@ -27,7 +27,7 @@ def get_detector():
     return _detector
 
 
-async def _send_proactive_coach(ws: WebSocket, trigger_context: str):
+async def _send_proactive_coach(ws: WebSocket, trigger_context: str, trigger_type: str = "proactive"):
     """Call DashScope API with proactive coach context, send result as 'coach' message."""
     config = load_api_config()
     if not config.get("use_remote") or not config.get("api_key"):
@@ -55,7 +55,7 @@ async def _send_proactive_coach(ws: WebSocket, trigger_context: str):
 
         # Run synchronous API call in thread pool to avoid blocking the event loop
         reply = await asyncio.get_event_loop().run_in_executor(None, _call_api)
-        await ws.send_json({"type": "coach", "text": reply, "trigger": "proactive"})
+        await ws.send_json({"type": "coach", "text": reply, "trigger": trigger_type})
     except Exception:
         pass  # Proactive coach failure should not break the detection loop
 
@@ -86,8 +86,9 @@ async def websocket_detect(ws: WebSocket):
             await ws.send_json({"type": "result", **result})
 
             trigger_context = result.pop("trigger_context", None)
+            trigger_type = result.pop("trigger_type", "proactive")
             if trigger_context:
-                asyncio.create_task(_send_proactive_coach(ws, trigger_context))
+                asyncio.create_task(_send_proactive_coach(ws, trigger_context, trigger_type))
 
     processor = asyncio.create_task(process_frames())
 

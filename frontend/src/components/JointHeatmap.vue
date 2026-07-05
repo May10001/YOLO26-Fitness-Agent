@@ -1,15 +1,15 @@
 <template>
-  <div class="glow-card rounded-[14px] p-3.5">
+  <div class="flat-card p-3.5">
     <div class="flex justify-between items-center mb-2.5">
-      <span class="text-[10px] uppercase tracking-wider text-flame/70 font-semibold">关节角度</span>
-      <span class="text-[9px] text-gray-600">{{ summaryText }}</span>
+      <span class="text-[10px] uppercase tracking-wider text-steel font-semibold">关节角度</span>
+      <span class="text-[9px] text-faint">{{ summaryText }}</span>
     </div>
-    <div v-if="!joints || joints.length === 0" class="text-[10px] text-gray-600">等待数据...</div>
+    <div v-if="!joints || joints.length === 0" class="text-[10px] text-faint">等待数据...</div>
     <div v-else class="flex flex-col gap-1">
       <div v-for="j in joints" :key="j.key"
            class="flex items-center gap-2 text-[10px]">
-        <span class="w-10 text-right text-gray-400 shrink-0">{{ j.name }}</span>
-        <div class="flex-1 h-2 rounded-full bg-white/[0.06] overflow-hidden">
+        <span class="w-10 text-right text-steel shrink-0">{{ j.name }}</span>
+        <div class="flex-1 h-2 rounded-full bg-mist overflow-hidden">
           <div class="h-full rounded-full transition-all duration-500"
                :class="barColor(j.severity)"
                :style="{ width: Math.min(j.deviation_ratio * 100, 100) + '%' }" />
@@ -21,7 +21,7 @@
       </div>
     </div>
     <!-- Legend -->
-    <div class="flex gap-3 mt-2 pt-2 border-t border-white/[0.05] text-[8px] text-gray-500">
+    <div class="flex gap-3 mt-2 pt-2 border-t border-concrete text-[8px] text-faint">
       <span>🟢 标准</span><span>🟠 偏差</span><span>🔴 偏离</span>
     </div>
   </div>

@@ -6,7 +6,11 @@
   "fitness_level": "beginner",
   "goal": "general",
   "equipment": "mat",
+  "injury_history": "",
+  "liked_exercises": [],
+  "disliked_exercises": [],
+  "training_days_per_week": 3,
   "medical_notes": "",
   "exercise_history": {},
-  "created_date": "2026-06-07"
+  "created_date": "2026-07-04"
 }

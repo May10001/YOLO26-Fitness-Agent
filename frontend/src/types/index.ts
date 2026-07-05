@@ -39,6 +39,75 @@ export interface GuidanceData {
   priority: number
 }
 
+/** AI coach diagnosis from LLM two-stage output (<diagnosis> XML block). */
+export interface DiagnosisData {
+  root_cause?: string
+  confidence?: number
+  affected_joints?: string[]
+  recommended_cues?: RecommendedCue[]
+  expected_effect?: string
+  raw_diagnosis?: string  // fallback when JSON parse fails
+}
+
+/** One recommended coaching cue extracted from diagnosis. */
+export interface RecommendedCue {
+  cue: string
+  tier: number     // 1=external focus, 2=internal focus, 3=regression
+  focus: string    // "external" | "internal" | "regression"
+}
+
+/** API chat response from POST /api/chat. */
+export interface ChatResponse {
+  reply: string
+  diagnosis?: DiagnosisData | null
+  recommended_cues?: RecommendedCue[] | null
+}
+
+/** One active cue being tracked for effectiveness. */
+export interface ActiveCueTracking {
+  error_name: string
+  last_cue: string
+  effective: boolean
+  tried_cues: string[]
+}
+
+/** Cue effectiveness tracking data from the backend (Phase 4). */
+export interface CueTrackingData {
+  active_cues: ActiveCueTracking[]
+}
+
+/** Per-joint diagnostic entry from the diagnostic snapshot. */
+export interface JointDiagEntry {
+  joint_name: string
+  current: number
+  target: number
+  deviation: number
+  status: string
+  std_dev: number
+  stability: string
+}
+
+/** Angle trend from linear regression on recent frames. */
+export interface AngleTrendData {
+  direction: string
+  slope: number
+  recent_values: number[]
+}
+
+/** Co-occurring error pattern with biomechanical interpretation. */
+export interface CooccurrenceEntry {
+  errors: string[]
+  interpretation: string
+}
+
+/** Full diagnostic snapshot computed per-frame (lightweight version of backend DiagnosticSnapshot). */
+export interface DiagnosticSnapshotData {
+  joint_deviations: JointDiagEntry[]
+  angle_trend: AngleTrendData | null
+  dimension_diagnosis: string
+  error_cooccurrence: CooccurrenceEntry[]
+}
+
 export interface DetectionResult {
   detected: boolean
   keypoints?: number[][]
@@ -50,6 +119,8 @@ export interface DetectionResult {
   guidance?: GuidanceData
   debug?: DebugData
   heatmap?: HeatmapData
+  cue_tracking?: CueTrackingData | null
+  diagnostic_snapshot?: DiagnosticSnapshotData | null
 }
 
 export interface JointDeviation {
@@ -82,11 +153,30 @@ export interface PoseContext {
   chat_mode?: string
 }
 
+/** Specific trigger reason for proactive coach messages. */
+export type CoachTriggerType =
+  | 'severe_error'
+  | 'score_drop'
+  | 'personal_best'
+  | 'milestone'
+  | 'good_streak'
+  | 'proactive'
+
+/** Human-readable labels and icons for each trigger type. */
+export const COACH_TRIGGER_META: Record<CoachTriggerType, { label: string; icon: string; color: string }> = {
+  severe_error:  { label: '检测到动作风险', icon: '🔴', color: 'text-red-400' },
+  score_drop:    { label: '动作质量下降',   icon: '📉', color: 'text-amber-400' },
+  personal_best: { label: '突破个人记录',   icon: '🏆', color: 'text-yellow-400' },
+  milestone:     { label: '达到里程碑',     icon: '🎯', color: 'text-emerald-400' },
+  good_streak:   { label: '连续标准动作',   icon: '⭐', color: 'text-blue-400' },
+  proactive:     { label: '教练提示',       icon: '⚡', color: 'text-flame/60' },
+}
+
 /** Proactive coaching message pushed from backend via WebSocket. */
 export interface CoachMessage {
   type: 'coach'
   text: string
-  trigger: string
+  trigger: CoachTriggerType
 }
 
 /** Training session record from backend history API. */

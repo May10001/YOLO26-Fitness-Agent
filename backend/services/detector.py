@@ -59,6 +59,7 @@ class DetectorService:
 
         guidance = None
         trigger_context = None
+        trigger_type = "proactive"
         if self.context_engine:
             msg = self.context_engine.process(analysis)
             if msg:
@@ -66,9 +67,12 @@ class DetectorService:
 
             # Proactive LLM coach: check if a trigger should fire this frame
             if self.realtime_coach:
-                trigger_context = self.realtime_coach.evaluate_frame(
+                trigger_event = self.realtime_coach.evaluate_frame(
                     analysis, self.context_engine.state, self.current_exercise
                 )
+                if trigger_event:
+                    trigger_context = trigger_event.context
+                    trigger_type = trigger_event.type.value
 
         # Build joint heatmap deviation data
         heatmap_data = None
@@ -90,6 +94,23 @@ class DetectorService:
                         for k, v in matrix.items()
                     ],
                 }
+
+        # --- Cue effectiveness tracking (Phase 4: exposed to frontend) ---
+        cue_tracking = None
+        if self.context_engine:
+            all_cues = self.context_engine.get_all_cue_effectiveness()
+            if all_cues:
+                active_cues = []
+                for err_name, eff in all_cues.items():
+                    if not eff.get("effective", True):
+                        active_cues.append({
+                            "error_name": err_name,
+                            "last_cue": eff.get("last_cue", ""),
+                            "effective": False,
+                            "tried_cues": eff.get("tried_cues", []),
+                        })
+                if active_cues:
+                    cue_tracking = {"active_cues": active_cues}
 
         # --- Debug: expose raw scoring internals for the frontend debug overlay ---
         std = self.analyzer.standard if self.analyzer else None
@@ -136,6 +157,49 @@ class DetectorService:
             "angular_velocity": round(temporal.angular_velocity, 1),
         }
 
+        # --- Diagnostic snapshot (per-joint σ, angle trend, dimension diagnosis) ---
+        diagnostic_snapshot = None
+        if self.analyzer and self.analyzer._scorer:
+            scorer = self.analyzer._scorer
+            scorer_data = scorer.get_diagnostic_data()
+            if scorer_data:
+                try:
+                    from code.coaching.diagnostic_context import DiagnosticContextBuilder
+                    snapshot = DiagnosticContextBuilder.build(
+                        analysis, scorer_data, self.current_exercise
+                    )
+                    # Serialize to JSON-compatible dict
+                    diag_dict: dict = {
+                        "joint_deviations": [],
+                        "angle_trend": None,
+                        "dimension_diagnosis": snapshot.dimension_diagnosis,
+                        "error_cooccurrence": [],
+                    }
+                    for key, jd in snapshot.joint_deviations.items():
+                        diag_dict["joint_deviations"].append({
+                            "joint_name": jd.joint_name,
+                            "current": jd.current,
+                            "target": jd.target,
+                            "deviation": jd.deviation,
+                            "status": jd.status,
+                            "std_dev": jd.std_dev,
+                            "stability": jd.stability,
+                        })
+                    if snapshot.angle_trend:
+                        diag_dict["angle_trend"] = {
+                            "direction": snapshot.angle_trend.direction,
+                            "slope": snapshot.angle_trend.slope,
+                            "recent_values": snapshot.angle_trend.recent_values,
+                        }
+                    for cp in snapshot.error_cooccurrence:
+                        diag_dict["error_cooccurrence"].append({
+                            "errors": cp.errors,
+                            "interpretation": cp.interpretation,
+                        })
+                    diagnostic_snapshot = diag_dict
+                except Exception:
+                    diagnostic_snapshot = None
+
         return {
             "detected": True,
             "keypoints": keypoints.tolist(),
@@ -154,8 +218,11 @@ class DetectorService:
             ],
             "guidance": guidance,
             "trigger_context": trigger_context,
+            "trigger_type": trigger_type,
             "heatmap": heatmap_data,
+            "cue_tracking": cue_tracking,
             "debug": debug_info,
+            "diagnostic_snapshot": diagnostic_snapshot,
         }
 
     def get_session_stats(self) -> dict:

@@ -1,36 +1,34 @@
 <template>
-  <div class="glow-card rounded-[14px] p-4 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
-    <div class="text-[10px] uppercase tracking-wider text-flame/80 font-semibold">Profile</div>
+  <div class="flat-card p-4 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+    <div class="text-[10px] uppercase tracking-wider text-steel font-semibold">Profile</div>
 
     <!-- Basic Info -->
     <div class="grid grid-cols-2 gap-2.5">
       <div>
-        <label class="text-[9px] text-gray-500 block mb-1">姓名</label>
-        <input v-model="form.name" class="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-flame/40 transition-colors" />
+        <label class="text-[9px] text-faint block mb-1">姓名</label>
+        <input v-model="form.name" class="w-full bg-mist border border-concrete rounded-lg px-3 py-2 text-xs text-obsidian outline-none focus:border-obsidian transition-colors" />
       </div>
       <div>
-        <label class="text-[9px] text-gray-500 block mb-1">年龄</label>
-        <input v-model.number="form.age" type="number" min="10" max="99" class="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-flame/40 transition-colors" />
+        <label class="text-[9px] text-faint block mb-1">年龄</label>
+        <input v-model.number="form.age" type="number" min="10" max="99" class="w-full bg-mist border border-concrete rounded-lg px-3 py-2 text-xs text-obsidian outline-none focus:border-obsidian transition-colors" />
       </div>
       <div>
-        <label class="text-[9px] text-gray-500 block mb-1">身高 (cm)</label>
-        <input v-model.number="form.height_cm" type="number" min="100" max="250" class="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-flame/40 transition-colors" />
+        <label class="text-[9px] text-faint block mb-1">身高 (cm)</label>
+        <input v-model.number="form.height_cm" type="number" min="100" max="250" class="w-full bg-mist border border-concrete rounded-lg px-3 py-2 text-xs text-obsidian outline-none focus:border-obsidian transition-colors" />
       </div>
       <div>
-        <label class="text-[9px] text-gray-500 block mb-1">体重 (kg)</label>
-        <input v-model.number="form.weight_kg" type="number" min="30" max="200" class="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-flame/40 transition-colors" />
+        <label class="text-[9px] text-faint block mb-1">体重 (kg)</label>
+        <input v-model.number="form.weight_kg" type="number" min="30" max="200" class="w-full bg-mist border border-concrete rounded-lg px-3 py-2 text-xs text-obsidian outline-none focus:border-obsidian transition-colors" />
       </div>
     </div>
 
     <!-- Goal selector -->
     <div>
-      <label class="text-[9px] text-gray-500 block mb-1.5">健身目标</label>
+      <label class="text-[9px] text-faint block mb-1.5">健身目标</label>
       <div class="grid grid-cols-3 gap-1.5">
         <button v-for="g in goals" :key="g.value"
-                class="px-2 py-2 rounded-lg text-[10px] border transition-all"
-                :class="form.goal === g.value
-                  ? 'bg-flame/20 border-flame/40 text-flame font-semibold'
-                  : 'border-white/[0.07] text-gray-500 hover:text-gray-300'"
+                class="px-2 py-2 text-[10px] transition-all"
+                :class="form.goal === g.value ? 'pill-tag-active' : 'pill-tag'"
                 @click="form.goal = g.value">
           {{ g.emoji }} {{ g.label }}
         </button>
@@ -39,13 +37,11 @@
 
     <!-- Level selector -->
     <div>
-      <label class="text-[9px] text-gray-500 block mb-1.5">训练水平</label>
+      <label class="text-[9px] text-faint block mb-1.5">训练水平</label>
       <div class="grid grid-cols-3 gap-1.5">
         <button v-for="l in levels" :key="l.value"
-                class="px-2 py-2 rounded-lg text-[10px] border transition-all"
-                :class="form.fitness_level === l.value
-                  ? 'bg-flame/20 border-flame/40 text-flame font-semibold'
-                  : 'border-white/[0.07] text-gray-500 hover:text-gray-300'"
+                class="px-2 py-2 text-[10px] transition-all"
+                :class="form.fitness_level === l.value ? 'pill-tag-active' : 'pill-tag'"
                 @click="form.fitness_level = l.value">
           {{ l.label }}
         </button>
@@ -54,27 +50,27 @@
 
     <!-- Training days -->
     <div>
-      <label class="text-[9px] text-gray-500 block mb-1.5">
-        每周训练天数: <span class="text-flame font-bold">{{ form.training_days_per_week }}</span>
+      <label class="text-[9px] text-faint block mb-1.5">
+        每周训练天数: <span class="text-obsidian font-display font-bold">{{ form.training_days_per_week }}</span>
       </label>
       <input v-model.number="form.training_days_per_week" type="range" min="1" max="6"
-             class="w-full h-1.5 rounded-full appearance-none bg-white/[0.08] accent-flame outline-none" />
-      <div class="flex justify-between text-[8px] text-gray-600 mt-0.5">
+             class="w-full h-1.5 rounded-full appearance-none bg-concrete accent-obsidian outline-none" />
+      <div class="flex justify-between text-[8px] text-faint mt-0.5">
         <span>1天</span><span>2天</span><span>3天</span><span>4天</span><span>5天</span><span>6天</span>
       </div>
     </div>
 
     <!-- Injury history -->
     <div>
-      <label class="text-[9px] text-gray-500 block mb-1">伤病史（可选）</label>
+      <label class="text-[9px] text-faint block mb-1">伤病史（可选）</label>
       <textarea v-model="form.injury_history" rows="2"
                 placeholder="例如：左膝半月板损伤，避免深度屈膝动作"
-                class="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-flame/40 transition-colors resize-none placeholder:text-gray-600" />
+                class="w-full bg-mist border border-concrete rounded-lg px-3 py-2 text-xs text-obsidian outline-none focus:border-obsidian transition-colors resize-none placeholder:text-faint" />
     </div>
 
     <!-- Exercise preferences -->
     <div>
-      <label class="text-[9px] text-gray-500 block mb-1.5">动作偏好</label>
+      <label class="text-[9px] text-faint block mb-1.5">动作偏好</label>
       <div class="flex flex-wrap gap-1.5">
         <button v-for="ex in exerciseList" :key="ex"
                 class="px-2 py-1 rounded-md text-[9px] border transition-all"
@@ -83,7 +79,7 @@
           {{ ex }}
         </button>
       </div>
-      <div class="flex gap-4 mt-2 text-[8px] text-gray-600">
+      <div class="flex gap-4 mt-2 text-[8px] text-faint">
         <span><span class="inline-block w-2 h-2 rounded-full bg-emerald-500/30 mr-1" /> 喜欢</span>
         <span><span class="inline-block w-2 h-2 rounded-full bg-red-500/30 mr-1" /> 不想做</span>
         <span>默认 无偏好</span>
@@ -92,10 +88,10 @@
 
     <!-- Save -->
     <button @click="saveProfile" :disabled="saving"
-            class="w-full py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-flame to-rose text-white shadow-[0_0_20px_rgba(255,106,0,0.2)] hover:shadow-[0_0_30px_rgba(255,106,0,0.4)] transition-all duration-300 disabled:opacity-40">
+            class="pill-btn w-full py-2.5 text-xs font-bold transition-all duration-300 disabled:opacity-40">
       {{ saving ? '保存中...' : '保存画像' }}
     </button>
-    <div v-if="saveMsg" class="text-[10px] text-center" :class="saveOk ? 'text-emerald-400' : 'text-red-400'">
+    <div v-if="saveMsg" class="text-[10px] text-center" :class="saveOk ? 'text-emerald-500' : 'text-red-500'">
       {{ saveMsg }}
     </div>
   </div>
@@ -138,9 +134,9 @@ const saveMsg = ref('')
 const saveOk = ref(false)
 
 function prefClass(ex: string) {
-  if (form.liked_exercises.includes(ex)) return 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
-  if (form.disliked_exercises.includes(ex)) return 'bg-red-500/15 border-red-500/30 text-red-400'
-  return 'border-white/[0.07] text-gray-600 hover:text-gray-400'
+  if (form.liked_exercises.includes(ex)) return 'bg-emerald-500/15 border-emerald-500/40 text-emerald-600'
+  if (form.disliked_exercises.includes(ex)) return 'bg-red-500/10 border-red-500/30 text-red-600'
+  return 'border-concrete text-faint hover:text-steel'
 }
 
 function togglePref(ex: string) {

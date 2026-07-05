@@ -1,7 +1,19 @@
 <template>
   <EntryScreen v-if="showEntry" @enter="showEntry = false" />
-  <ParticleBackground :is-training="training.isRunning.value" />
-  <div class="relative z-10 h-screen w-screen p-3 flex gap-3">
+
+  <!-- Backend health indicator (Nike monochrome) -->
+  <div
+    class="fixed top-3 right-3 z-40 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[9px] border transition-all duration-500"
+    :class="backendOnline
+      ? 'bg-paper border-concrete text-obsidian'
+      : 'bg-paper border-danger/40 text-danger'"
+    :title="backendOnline ? '后端已连接' : '后端未响应 — 检查 uvicorn 是否启动'"
+  >
+    <span class="w-1.5 h-1.5 rounded-full" :class="backendOnline ? 'bg-success' : 'bg-danger'" />
+    {{ backendOnline ? 'API 在线' : 'API 离线' }}
+  </div>
+
+  <div class="relative z-10 h-screen w-screen p-3 flex gap-3 bg-paper">
     <div class="flex-[2.2] flex flex-col gap-3">
       <div class="flex-[3] flex gap-3 relative">
         <VideoStage
@@ -15,12 +27,6 @@
           :stream="camera.stream.value"
           :show-debug="showDebug"
           :target-reps="effectiveTargetReps"
-        />
-        <PoseViewer
-          class="flex-1"
-          :keypoints="ws.lastResult.value?.keypoints || null"
-          :errors="ws.lastResult.value?.errors || []"
-          :score-total="currentScore.total"
         />
         <PlanRunner
           :visible="planMode"
@@ -37,14 +43,14 @@
         />
         <!-- Debug toggle button -->
         <button
-          class="absolute top-6 right-8 z-30 px-2.5 py-1 rounded-full text-[9px] font-bold border transition-all duration-300"
+          class="absolute top-6 right-8 z-30 px-2.5 py-1 rounded-full text-[9px] font-medium border transition-all duration-300"
           :class="showDebug
-            ? 'bg-flame/30 text-flame border-flame/50 shadow-[0_0_12px_rgba(255,106,0,0.3)]'
-            : 'bg-black/50 text-gray-500 border-white/10 hover:border-flame/30 hover:text-flame'"
+            ? 'bg-obsidian text-paper border-obsidian'
+            : 'bg-black/40 text-paper/70 border-white/20 hover:border-white/50 hover:text-paper'"
           @click="toggleDebug"
-          title="按 D 键切换调试面板"
+          title="按 D 键切换调试面板 / 骨架"
         >
-          {{ showDebug ? '🐛 ON' : '🐛 DEBUG' }}
+          {{ showDebug ? '骨架 ON' : '骨架 / DEBUG' }}
         </button>
       </div>
       <ControlBar
@@ -77,13 +83,13 @@
         :score="currentScore"
       />
 
-      <!-- Tab switcher -->
-      <div class="flex gap-1 bg-white/[0.03] rounded-lg p-0.5">
+      <!-- Tab switcher (Nike pill tabs) -->
+      <div class="flex gap-1.5">
         <button v-for="tab in tabs" :key="tab.key"
-                class="flex-1 text-[10px] py-1.5 rounded-md font-medium transition-colors"
+                class="flex-1 text-[10px] py-1.5 rounded-full font-medium border transition-colors"
                 :class="activeTab === tab.key
-                  ? 'bg-flame/20 text-flame'
-                  : 'text-gray-500 hover:text-gray-300'"
+                  ? 'bg-obsidian text-paper border-obsidian'
+                  : 'bg-transparent text-steel border-concrete hover:text-obsidian'"
                 @click="activeTab = tab.key">
           {{ tab.label }}
         </button>
@@ -92,7 +98,8 @@
       <!-- Tab content -->
       <AiCoach v-if="activeTab === 'coach'"
                :pose-context="poseContext"
-               :coach-message="ws.lastCoachMessage.value" />
+               :coach-message="ws.lastCoachMessage.value"
+               :cue-tracking="cueTracking" />
       <FitnessQA v-else-if="activeTab === 'qa'" />
       <HistoryPanel v-else-if="activeTab === 'history'" />
       <template v-else-if="activeTab === 'plan'">
@@ -115,12 +122,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import type { ScoreData, PoseContext, SummaryData, ErrorSummary, PlanStep } from './types'
+import type { ScoreData, PoseContext, SummaryData, ErrorSummary, PlanStep, CueTrackingData } from './types'
 import { config } from './config'
 import { useCamera } from './composables/useCamera'
 import { useWebSocket } from './composables/useWebSocket'
 import { useTrainingState } from './composables/useTrainingState'
-import ParticleBackground from './components/ParticleBackground.vue'
 import EntryScreen from './components/EntryScreen.vue'
 import VideoStage from './components/VideoStage.vue'
 import ControlBar from './components/ControlBar.vue'
@@ -129,8 +135,6 @@ import CorrectionPanel from './components/CorrectionPanel.vue'
 import AiCoach from './components/AiCoach.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import JointHeatmap from './components/JointHeatmap.vue'
-import PoseViewer from './components/PoseViewer.vue'
-import DebugOverlay from './components/DebugOverlay.vue'
 import TrainingSummary from './components/TrainingSummary.vue'
 import ProfilePage from './components/ProfilePage.vue'
 import AIPlanGenerator from './components/AIPlanGenerator.vue'
@@ -152,8 +156,30 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => { fetchExercises(); window.addEventListener('keydown', onKeyDown) })
-onUnmounted(() => { stopFrameLoop(); camera.stop(); ws.disconnect(); window.removeEventListener('keydown', onKeyDown) })
+// ---- Backend health monitoring ----
+const backendOnline = ref(false)
+let healthTimer: number | null = null
+
+async function checkHealth() {
+  try {
+    const res = await fetch(config.endpoints.health, { signal: AbortSignal.timeout(3000) })
+    backendOnline.value = res.ok
+  } catch {
+    backendOnline.value = false
+  }
+}
+
+onMounted(() => {
+  fetchExercises()
+  window.addEventListener('keydown', onKeyDown)
+  checkHealth()
+  healthTimer = window.setInterval(checkHealth, 15000)  // every 15s
+})
+onUnmounted(() => {
+  stopFrameLoop(); camera.stop(); ws.disconnect()
+  window.removeEventListener('keydown', onKeyDown)
+  if (healthTimer) clearInterval(healthTimer)
+})
 
 const tabs = [{ key: 'coach', label: 'AI教练' }, { key: 'qa', label: '问答' }, { key: 'history', label: '历史' }, { key: 'plan', label: '计划' }]
 const activeTab = ref('coach')
@@ -210,6 +236,7 @@ const currentScore = computed<ScoreData>(() =>
   ws.lastResult.value?.score || { total: 0, angle: 0, temporal: 0, symmetry: 0 }
 )
 const totalErrors = computed(() => ws.lastResult.value?.errors?.length || 0)
+const cueTracking = computed<CueTrackingData | null>(() => ws.lastResult.value?.cue_tracking || null)
 
 const poseContext = computed<PoseContext>(() => {
   const r = ws.lastResult.value

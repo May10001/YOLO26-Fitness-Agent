@@ -1,20 +1,20 @@
 <template>
-  <div class="glow-card rounded-[14px] p-3.5 flex-1 flex flex-col min-h-0">
-    <div class="text-[10px] uppercase tracking-wider text-flame/70 font-semibold mb-2.5">训练历史</div>
-    <div v-if="loading" class="text-[10px] text-gray-600">加载中...</div>
-    <div v-else-if="sessions.length === 0" class="text-[10px] text-gray-600">暂无训练记录</div>
+  <div class="flat-card p-3.5 flex-1 flex flex-col min-h-0">
+    <div class="text-[10px] uppercase tracking-wider text-steel font-semibold mb-2.5">训练历史</div>
+    <div v-if="loading" class="text-[10px] text-faint">加载中...</div>
+    <div v-else-if="sessions.length === 0" class="text-[10px] text-faint">暂无训练记录</div>
     <div v-else class="flex-1 overflow-y-auto flex flex-col gap-1.5">
       <div v-for="s in sessions" :key="s.session_id"
-           class="rounded-lg p-2.5 bg-white/[0.03] border border-white/[0.06]">
+           class="rounded-lg p-2.5 bg-mist border border-concrete">
         <div class="flex justify-between items-center mb-1">
-          <span class="text-[11px] text-gray-200 font-medium">{{ s.exercise }}</span>
-          <span class="text-[9px] text-gray-500">{{ formatDate(s.start_time) }}</span>
+          <span class="text-[11px] text-obsidian font-medium">{{ s.exercise }}</span>
+          <span class="text-[9px] text-faint">{{ formatDate(s.start_time) }}</span>
         </div>
-        <div class="flex gap-3 text-[10px] text-gray-400">
+        <div class="flex gap-3 text-[10px] text-steel">
           <span>⏱ {{ fmtDuration(s.duration_seconds) }}</span>
           <span>🔢 {{ s.total_reps }}次</span>
           <span>⭐ {{ s.best_score }}分</span>
-          <span class="text-gray-500">均{{ s.avg_score }}分</span>
+          <span class="text-faint">均{{ s.avg_score }}分</span>
         </div>
       </div>
     </div>

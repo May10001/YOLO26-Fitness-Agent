@@ -324,25 +324,41 @@ cd frontend && npm install && npm run dev
 ```
 浏览器摄像头 (MediaStream)
   → useCamera.ts 抽帧 → base64 JPEG ~30fps
-  → WebSocket /ws/detect → 后端 DetectorService (YOLO26 + PoseAnalyzer + ContextEngine)
-  → JSON {keypoints, score, phase, count, errors, guidance, heatmap}
+  → WebSocket /ws/detect → 后端 DetectorService
+      (YOLO26 + PoseAnalyzer + MovementScorer + ContextEngine
+       + RealTimeCoach + DiagnosticContextBuilder)
+  → JSON {
+      keypoints, score, phase, count, errors, guidance,
+      heatmap, debug, diagnostic_snapshot, cue_tracking, trigger_type
+    }
   → 更新 VideoStage / ScorePanel / JointHeatmap / CorrectionPanel
+      / PoseViewer / DebugOverlay（含诊断快照）/ AiCoach（cue追踪）
 
 用户聊天 → POST /api/chat {message, pose_context}
   → 有 pose_context：LangGraph CoachAgent（教练提示词 → 百炼 DashScope）
+      → ChatResponse {reply, diagnosis, recommended_cues}
   → 否则：通用 DashScope 调用，失败回退本地 FitnessAgent
+  → AiCoach 展示回复 + 可展开诊断详情（根因/置信度/推荐cue Tier）
+
+RAG 问答 → POST /api/rag/query {question}
+  → TF-IDF 检索 fitness_dataset.json → LLM 增强回答
+  → FitnessQA 展示回答 + 来源引用
 ```
 
 ### 后端模块（`backend/`）
 
 | 文件 | 职责 |
 |------|------|
-| `main.py` | FastAPI 应用 + CORS，挂载 detect / chat 路由 |
-| `routers/detect.py` | WebSocket `/ws/detect`，处理 `set_exercise` / `reset` / `frame` 消息，懒加载 DetectorService |
-| `routers/chat.py` | REST `POST /api/chat`，有 pose_context 走 LangGraph CoachAgent，否则通用 DashScope / 回退本地 |
-| `services/detector.py` | 封装 YOLO26 + PoseAnalyzer + ContextEngine，`process_frame()` 返回检测结果 |
+| `main.py` | FastAPI 应用 + CORS，挂载 detect / chat / config / rag 路由 |
+| `routers/detect.py` | WebSocket `/ws/detect`，处理 `set_exercise` / `reset` / `frame` 消息，懒加载 DetectorService。主动教练推送携带具体 trigger 类型 |
+| `routers/chat.py` | REST `POST /api/chat`，有 pose_context 走 LangGraph CoachAgent（返回 diagnosis + recommended_cues），否则通用 DashScope / 回退本地。含 session/profile/plan 管理 API |
+| `routers/config.py` | GET/PUT `/api/config/scoring` 运行时调参接口 |
+| `routers/rag.py` | POST `/api/rag/query` RAG 健身知识问答（TF-IDF 检索 + LLM 生成） |
+| `services/detector.py` | 封装 YOLO26 + PoseAnalyzer + ContextEngine + RealTimeCoach + DiagnosticContextBuilder，`process_frame()` 返回检测结果含 debug/diagnostic_snapshot/cue_tracking |
 | `services/agent_service.py` | FitnessAgent 懒加载单例，延迟 `transformers` 导入到首次聊天 |
 | `schemas.py` | Pydantic 请求/响应模型 |
+| `rag/engine.py` | TF-IDF + 余弦相似度检索引擎，自动从 `fitness_dataset.json` 构建索引，支持中文 bigram 分词 |
+| `config.py` | API 配置加载（从 `data/api_config.json`） |
 
 > 重型 ML 依赖（ultralytics / transformers / torch）全部延迟到首次使用，FastAPI 秒级启动，不在 import 时加载 GB 级模型。
 
@@ -351,17 +367,23 @@ cd frontend && npm install && npm run dev
 | 组件 | 职责 |
 |------|------|
 | `EntryScreen.vue` | ★ **入场页**：神经网络粒子 + 赛博地平线融合背景，鼠标吸附高亮交互，编排式逐层入场，点击光晕扩散淡出进入主界面 |
-| `VideoStage.vue` | 主视频显示 + HUD（次数、阶段、计时） |
+| `VideoStage.vue` | 主视频显示 + HUD（次数、阶段、计时、引导横幅） + DebugOverlay 集成 |
 | `SkeletonOverlay.vue` | Canvas 骨架叠加，渐变骨骼 + 发光关节，错误关节标红 |
 | `GaugeBar.vue` | CSS 仪表条（角度/时序/对称三维度评分） |
 | `ScorePanel.vue` | 右栏总分 + 环形仪表 |
 | `JointHeatmap.vue` | ★ 关节角度偏离条形图（good/warning/bad 三色） |
 | `CorrectionPanel.vue` | 错误列表 + 严重度指示 |
-| `AiCoach.vue` | AI 教练问答聊天 |
+| `AiCoach.vue` | ★ AI 教练问答聊天，支持：诊断详情展开（根因/置信度/推荐cue/Tier级别）、主动推送触发类型标识、cue效果追踪指示器 |
+| `FitnessQA.vue` | ★ RAG 健身知识问答（基于 TF-IDF + 1626 条专业知识库，带来源引用） |
 | `HistoryPanel.vue` | ★ 训练历史列表（从 `/api/session` 拉取） |
-| `PlanPanel.vue` | ★ 用户画像表单 + 周度训练计划生成 |
-| `ControlBar.vue` | 动作选择 + 开始/暂停/重置 |
-| `DebugOverlay.vue` | 🐛 开发者调试面板：原始角度/评分明细/角度波形/实时调参滑块（D 键切换） |
+| `PlanPanel.vue` | 用户画像表单 + 周度训练计划生成（规则引擎） |
+| `ProfilePage.vue` | ★ 用户画像表单（目标/水平/伤病史/动作偏好） |
+| `AIPlanGenerator.vue` | ★ AI 训练计划生成（LLM 按需生成，含规则引擎 fallback） |
+| `PlanRunner.vue` | ★ 训练计划执行器（引导式逐动作训练 + 组间休息倒计时 + 进度点阵） |
+| `PoseViewer.vue` | ★ 独立姿态视图（骨架叠加在参考网格上，独立于摄像头画面） |
+| `TrainingSummary.vue` | ★ 训练总结面板（总次数/最佳&平均得分/三维度分项/错误排行） |
+| `ControlBar.vue` | 动作选择 + 开始/暂停/重置 + 目标次数 |
+| `DebugOverlay.vue` | 🐛 开发者调试面板：原始角度/评分明细/角度波形/实时调参滑块 + **诊断快照**（关节σ/趋势/共现模式）（D 键切换） |
 | `RingGauge.vue` / `ParticleBackground.vue` | 环形进度 / 粒子背景 |
 
 **Composables**：`useCamera.ts`（摄像头抽帧）、`useWebSocket.ts`（连接管理 + 重连）、`useTrainingState.ts`（idle/running/paused 状态机 + 计时）。
@@ -369,11 +391,15 @@ cd frontend && npm install && npm run dev
 ### 本轮前端更新（供后续成员了解进度）
 
 - **新增入场页 `EntryScreen.vue`** — App 加载时全屏覆盖（`z-50`），点击 `enter` 事件后切换到训练界面。融合方案：发光地平线 + 压暗透视网格打底，神经网络粒子浮中层；鼠标 190px 内节点被拉向光标、连线变粗变亮（吸附+高亮）；编排式逐层入场（地平线→网格→粒子组网→标题→「点击进入」呼吸）；点击迸发橙玫光晕扩散并整体淡出。
-  - 工程化：canvas 走 `requestAnimationFrame`，`onUnmounted` 清理 raf / 监听 / timer；支持 `prefers-reduced-motion` 降级（跳过编排与动画，直接显示）；关键帧加 `entry-` 前缀避免冲突。
-  - 接入点：`App.vue` 的 `showEntry` ref 控制显隐。如需「仅首次访问显示」可改用 sessionStorage。
-  - 设计稿存档：`frontend/entry-previews/`（4 种原始风格 + 2 种融合版 + `compare.html` 对比页），最终采用「融合A + 吸附高亮」。
 - **新增 `HistoryPanel.vue` / `PlanPanel.vue` / `JointHeatmap.vue`** — 右栏 Tab 切换（AI教练 / 历史 / 计划），关节热力图独立展示。
-- **修改** `App.vue`（入场页接入 + 会话生命周期 + 三维度评分聚合）、`useWebSocket.ts`（新增 guidance / coach 消息）、`types/index.ts`（`HeatmapData` / `PoseContext` 等类型）、`AiCoach.vue` / `ScorePanel.vue` / `CorrectionPanel.vue` / `VideoStage.vue`。
+- **新增 `FitnessQA.vue`** — RAG 健身知识问答，基于 TF-IDF + 余弦相似度检索 1626 条专业知识库，支持中文 bigram 分词，LLM 增强回答并附来源引用。后端 `backend/rag/engine.py` + `backend/routers/rag.py`。
+- **新增 `ProfilePage.vue` / `AIPlanGenerator.vue` / `PlanRunner.vue`** — 用户画像表单（目标/水平/伤病史/动作偏好）+ AI 训练计划生成（LLM 按需）+ 引导式逐动作训练执行器（热身→训练块→整理，组间休息倒计时，进度点阵）。
+- **新增 `PoseViewer.vue`** — 独立姿态视图：骨架叠加在参考网格上，独立于摄像头画面展示，带评分光晕。
+- **新增 `TrainingSummary.vue`** — 训练结束总结面板：总次数/最佳&平均得分/三维度分项进度条/错误频次排行/完美动作判定。
+- **AiCoach 诊断可视化升级** — 支持展开 LLM 两段式输出的 `<diagnosis>` JSON（根因/置信度条/涉及关节/推荐 cue Tier 级别/预期效果）；主动教练推送根据 trigger 类型显示不同标识（🔴严重错误/📉评分下降/🏆个人最佳/🎯里程碑/⭐连续标准）；顶部显示 cue 效果追踪指示器（🎯追踪中）。
+- **DebugOverlay 诊断快照** — 新增🔬诊断快照面板：维度诊断文字 + 角度趋势方向&斜率 + 可展开的逐关节 σ 稳定性柱状图 + 共现模式 biomechanical 解读 + 近5帧角度序列。
+- **修改** `App.vue`（入场页接入 + 会话生命周期 + 三维度评分聚合 + cueTracking 传递）、`useWebSocket.ts`（新增 guidance / coach 消息）、`types/index.ts`（`DiagnosisData` / `RecommendedCue` / `CoachTriggerType` / `CueTrackingData` / `DiagnosticSnapshotData` 等类型）、`AiCoach.vue` / `ScorePanel.vue` / `CorrectionPanel.vue` / `VideoStage.vue` / `DebugOverlay.vue`。
+- **后端同步** `code/realtime_coach.py`（`evaluate_frame` 返回完整 `TriggerEvent`）、`backend/routers/detect.py`（WebSocket coach 消息携带具体 trigger 类型）、`backend/services/detector.py`（新增 `diagnostic_snapshot` / `cue_tracking` / `trigger_type` 字段）。
 
 ### 本轮后端修改记录（2025-06-14）
 

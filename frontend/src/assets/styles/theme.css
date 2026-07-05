@@ -3,54 +3,107 @@
 @tailwind utilities;
 
 :root {
+  /* Nike monochrome palette (DESIGN) */
+  --obsidian: #111111;
+  --paper: #ffffff;
+  --concrete: #e5e5e5;
+  --mist: #f5f5f5;
+  --steel: #707072;
+  --faint: #9e9ea0;
+
+  /* Functional colors (retained as the only chroma) */
   --flame: #ff6a00;
   --rose: #ee0979;
   --success: #38ef7d;
   --danger: #ff4d4d;
-  --bg: #0a0a0a;
-  --panel: #111111;
+
+  /* Legacy aliases (some components still reference these) */
+  --bg: #ffffff;
+  --panel: #ffffff;
 }
 
 body {
-  background: var(--bg);
-  color: #fff;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+  background: var(--paper);
+  color: var(--obsidian);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
   margin: 0;
   overflow: hidden;
   height: 100vh;
 }
 
-.glow-card {
-  border-radius: 14px;
-  padding: 16px;
-  background: linear-gradient(135deg, rgba(255,106,0,0.08), rgba(238,9,121,0.04));
-  border: 1px solid rgba(255,106,0,0.15);
-  box-shadow: 0 0 25px rgba(255,106,0,0.06), 0 0 50px rgba(238,9,121,0.03);
+/* ============================================================
+   Nike component primitives — flat, sharp-edged, no shadow
+   ============================================================ */
+
+/* Flat card: white surface, 1px concrete hairline, no radius, no shadow */
+.flat-card {
+  background: var(--paper);
+  border: 1px solid var(--concrete);
+  border-radius: 0;
+  box-shadow: none;
 }
 
-.glow-card-strong {
-  background: linear-gradient(135deg, rgba(255,106,0,0.1), rgba(238,9,121,0.05));
-  border: 1px solid rgba(255,106,0,0.2);
-  box-shadow: 0 0 30px rgba(255,106,0,0.08), 0 0 60px rgba(238,9,121,0.04);
+/* Soft-mist card variant for secondary surfaces */
+.mist-card {
+  background: var(--mist);
+  border: 1px solid var(--concrete);
+  border-radius: 0;
+  box-shadow: none;
 }
 
+/* Pill button (primary): Obsidian fill, white text, 30px radius, no shadow */
+.pill-btn {
+  background: var(--obsidian);
+  color: var(--paper);
+  border: 1px solid var(--obsidian);
+  border-radius: 30px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.25s ease, background 0.25s ease, color 0.25s ease;
+}
+.pill-btn:hover { opacity: 0.82; }
+.pill-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Pill button (invert): white fill, black text, black hairline */
+.pill-btn-invert {
+  background: var(--paper);
+  color: var(--obsidian);
+  border: 1px solid var(--obsidian);
+  border-radius: 30px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+.pill-btn-invert:hover { background: var(--obsidian); color: var(--paper); }
+
+/* Pill tag (selectable chip): default outline, selected = filled black */
+.pill-tag {
+  border: 1px solid var(--concrete);
+  border-radius: 30px;
+  color: var(--steel);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.pill-tag:hover { border-color: var(--steel); color: var(--obsidian); }
+.pill-tag-active {
+  background: var(--obsidian);
+  border-color: var(--obsidian);
+  color: var(--paper);
+}
+
+/* Hairline divider */
+.hairline { border-color: var(--concrete); }
+
+/* Display font utility (Jost — Futura substitute for hero/large numbers) */
+.font-display { font-family: 'Jost', 'Inter', sans-serif; }
+
+/* Gradient text retained for score emphasis (functional chroma) */
 .gradient-text {
   background: linear-gradient(90deg, var(--flame), var(--rose));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, var(--flame), var(--rose));
-  border: none;
-  color: #fff;
-  border-radius: 10px;
-  font-weight: 700;
-  box-shadow: 0 0 20px rgba(255,106,0,0.3);
-  cursor: pointer;
-  transition: box-shadow 0.3s, transform 0.2s;
-}
-.btn-primary:hover {
-  box-shadow: 0 0 30px rgba(255,106,0,0.5);
-  transform: scale(1.02);
 }

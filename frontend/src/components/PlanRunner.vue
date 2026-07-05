@@ -10,12 +10,12 @@
     </div>
 
     <!-- Current exercise -->
-    <div class="text-5xl font-extrabold gradient-text text-center mb-1">
+    <div class="text-5xl font-display font-semibold text-paper text-center mb-1">
       {{ current.exercise }}
     </div>
 
     <!-- Target display -->
-    <div class="text-lg font-bold mb-6" :class="isRest ? 'text-amber-400' : 'text-white'">
+    <div class="text-lg font-medium mb-6" :class="isRest ? 'text-amber-400' : 'text-paper'">
       <template v-if="isRest">
         休息 {{ restCountdown }}s
       </template>
@@ -23,19 +23,19 @@
         保持 {{ current.duration_seconds }}s
       </template>
       <template v-else>
-        <span class="text-3xl">{{ repsDone }}</span>
-        <span class="text-gray-500"> / {{ repsTarget }} reps</span>
+        <span class="text-3xl font-display">{{ repsDone }}</span>
+        <span class="text-paper/50"> / {{ repsTarget }} reps</span>
       </template>
     </div>
 
     <!-- Notes -->
-    <div v-if="current.notes && !isRest" class="text-xs text-gray-400 mb-6 max-w-xs text-center">
+    <div v-if="current.notes && !isRest" class="text-xs text-paper/70 mb-6 max-w-xs text-center">
       {{ current.notes }}
     </div>
 
     <!-- Progress bar -->
-    <div class="w-64 h-1 rounded-full bg-white/[0.08] mb-6 overflow-hidden">
-      <div class="h-full rounded-full bg-flame transition-all duration-500"
+    <div class="w-64 h-1 rounded-full bg-white/[0.15] mb-6 overflow-hidden">
+      <div class="h-full rounded-full bg-paper transition-all duration-500"
            :style="{ width: (totalSteps > 0 ? (stepIndex / totalSteps) * 100 : 0) + '%' }" />
     </div>
 
@@ -43,24 +43,24 @@
     <div class="flex gap-1.5 mb-6">
       <div v-for="(s, i) in steps" :key="i"
            class="w-1.5 h-1.5 rounded-full transition-all duration-300"
-           :class="i < stepIndex ? 'bg-flame' : i === stepIndex ? 'bg-white scale-150' : 'bg-white/[0.15]'" />
+           :class="i < stepIndex ? 'bg-paper' : i === stepIndex ? 'bg-paper scale-150' : 'bg-white/[0.25]'" />
     </div>
 
-    <div class="text-[9px] text-gray-600 mb-6">步骤 {{ stepIndex + 1 }} / {{ totalSteps }}</div>
+    <div class="text-[9px] text-paper/50 mb-6">步骤 {{ stepIndex + 1 }} / {{ totalSteps }}</div>
 
     <!-- Controls -->
     <div class="flex gap-3">
       <button v-if="isRest && restCountdown > 3"
               @click="skipRest"
-              class="px-4 py-2 rounded-lg text-[11px] bg-white/[0.06] border border-white/10 text-gray-400">
+              class="px-4 py-2 rounded-full text-[11px] border border-white/30 text-paper/80 hover:bg-white/10 transition-colors">
         跳过休息
       </button>
       <button @click="$emit('skip')"
-              class="px-4 py-2 rounded-lg text-[11px] bg-white/[0.06] border border-white/10 text-gray-400">
+              class="px-4 py-2 rounded-full text-[11px] border border-white/30 text-paper/80 hover:bg-white/10 transition-colors">
         跳过
       </button>
       <button @click="$emit('quit')"
-              class="px-4 py-2 rounded-lg text-[11px] bg-red-500/[0.12] border border-red-500/[0.25] text-red-400">
+              class="px-4 py-2 rounded-full text-[11px] border border-danger/50 text-danger hover:bg-danger/10 transition-colors">
         结束训练
       </button>
     </div>

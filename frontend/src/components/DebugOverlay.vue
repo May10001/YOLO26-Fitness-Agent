@@ -16,7 +16,7 @@
       </div>
       <div class="flex justify-between gap-6 mt-1 border-t border-white/5 pt-1">
         <span class="text-gray-500">目标</span>
-        <span class="text-flame">{{ debug.target_angle ?? '--' }}°</span>
+        <span class="text-paper">{{ debug.target_angle ?? '--' }}°</span>
       </div>
       <div class="flex justify-between gap-6">
         <span class="text-gray-500">阶段</span>
@@ -43,7 +43,7 @@
 
       <div class="flex justify-between gap-6">
         <span class="text-gray-400">角度分</span>
-        <span class="text-flame">{{ score.angle.toFixed(1) }}/40</span>
+        <span class="text-paper">{{ score.angle.toFixed(1) }}/40</span>
       </div>
       <div class="text-[8px] text-gray-600 pl-2 leading-tight">
         exp(-({{ fmt(debug.deviation) }}/{{ tuning.angle_tolerance }})²)×40
@@ -51,7 +51,7 @@
 
       <div class="flex justify-between gap-6 mt-1">
         <span class="text-gray-400">对称分</span>
-        <span class="text-rose">{{ score.symmetry.toFixed(1) }}/30</span>
+        <span class="text-paper">{{ score.symmetry.toFixed(1) }}/30</span>
       </div>
       <div class="text-[8px] text-gray-600 pl-2 leading-tight">
         (1 - {{ fmt(debug.knee_diff) }}/{{ debug.symmetry_max_diff ?? 12 }})×30
@@ -68,6 +68,74 @@
       <div class="flex justify-between gap-6 mt-1.5 pt-1.5 border-t border-white/10 font-bold">
         <span class="text-gray-300">总分</span>
         <span :class="totalColor(score.total)">{{ score.total.toFixed(1) }}/100</span>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Section 5: Diagnostic Snapshot (σ, trends, co-occurrence)     -->
+    <!-- ============================================================ -->
+    <div v-if="diag" class="absolute top-[54%] right-4 bg-black/80 backdrop-blur-lg border border-white/10 rounded-xl px-3.5 py-2.5 text-[10px] font-mono leading-relaxed max-w-[280px] pointer-events-auto">
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="text-[9px] text-gray-500 uppercase tracking-wider">🔬 诊断快照</span>
+        <button class="text-[9px] text-gray-600 hover:text-gray-400 transition-colors"
+                @click="showDiagDetail = !showDiagDetail">
+          {{ showDiagDetail ? '折叠' : '展开' }}
+        </button>
+      </div>
+
+      <!-- Dimension diagnosis (always visible) -->
+      <div class="text-[9px] leading-snug mb-1.5" :class="diagDimColor(diag.dimension_diagnosis)">
+        {{ diag.dimension_diagnosis || '暂无维度诊断' }}
+      </div>
+
+      <!-- Angle trend (always visible) -->
+      <div v-if="diag.angle_trend" class="flex items-center gap-1.5 text-[9px] mb-1">
+        <span class="text-gray-500">趋势:</span>
+        <span :class="trendColor(diag.angle_trend.direction)">{{ diag.angle_trend.direction }}</span>
+        <span class="text-gray-600">(斜率 {{ diag.angle_trend.slope >= 0 ? '+' : '' }}{{ diag.angle_trend.slope.toFixed(3) }}°/帧)</span>
+      </div>
+
+      <!-- Detail section (expandable) -->
+      <div v-if="showDiagDetail" class="mt-2 pt-2 border-t border-white/[0.06] space-y-2 animate-[fadeIn_0.2s_ease-out]">
+        <!-- Per-joint stability -->
+        <div v-if="diag.joint_deviations?.length">
+          <div class="text-[8px] text-gray-600 mb-1 uppercase tracking-wider">关节稳定性 (σ)</div>
+          <div class="space-y-0.5">
+            <div v-for="jd in diag.joint_deviations" :key="jd.joint_name"
+                 class="flex items-center justify-between gap-2">
+              <span class="text-gray-400 w-10">{{ jd.joint_name }}</span>
+              <span class="text-gray-300 w-10 text-right">{{ jd.current }}°</span>
+              <div class="flex-1 h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-300"
+                     :class="stabilityBarColor(jd.stability)"
+                     :style="{ width: Math.min(100, (jd.std_dev / 10) * 100) + '%' }" />
+              </div>
+              <span class="w-12 text-right" :class="stabilityTextColor(jd.stability)">
+                σ={{ jd.std_dev.toFixed(1) }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Co-occurrence patterns -->
+        <div v-if="diag.error_cooccurrence?.length">
+          <div class="text-[8px] text-gray-600 mb-1 uppercase tracking-wider">共现模式</div>
+          <div v-for="(cp, i) in diag.error_cooccurrence" :key="i"
+               class="text-[9px] text-amber-300/80 leading-snug bg-amber-500/[0.06] rounded px-2 py-1 border border-amber-500/10">
+            <span class="text-amber-400 font-semibold">{{ cp.errors.join(' + ') }}</span>
+            <span class="text-gray-500 mx-1">→</span>
+            <span class="text-gray-400">{{ cp.interpretation }}</span>
+          </div>
+        </div>
+
+        <!-- Recent angle values -->
+        <div v-if="diag.angle_trend?.recent_values?.length">
+          <div class="text-[8px] text-gray-600 mb-0.5 uppercase tracking-wider">近5帧角度</div>
+          <div class="flex gap-0.5">
+            <span v-for="(v, i) in diag.angle_trend.recent_values.slice(-5)" :key="i"
+                  class="px-1 py-0.5 rounded text-[8px] bg-white/[0.04] text-gray-400 font-mono">{{ v.toFixed(0) }}°</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -97,11 +165,11 @@
     <!-- ============================================================ -->
     <!-- Section 4: Parameter Tuning Sliders                           -->
     <!-- ============================================================ -->
-    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 w-[520px] bg-black/85 backdrop-blur-lg border border-flame/20 rounded-xl px-4 py-3 pointer-events-auto">
+    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 w-[520px] bg-black/85 backdrop-blur-lg border border-white/15 rounded-xl px-4 py-3 pointer-events-auto">
       <div class="flex items-center justify-between mb-2">
         <span class="text-[9px] text-gray-500 uppercase tracking-wider">🎛️ 实时调参</span>
         <button
-          class="text-[9px] px-2 py-0.5 rounded border border-white/10 text-gray-500 hover:text-flame hover:border-flame/30 transition-colors"
+          class="text-[9px] px-2 py-0.5 rounded border border-white/10 text-gray-500 hover:text-paper hover:border-white/40 transition-colors"
           @click="resetTuning">重置默认</button>
       </div>
       <div class="grid grid-cols-5 gap-3">
@@ -162,7 +230,7 @@
 
 <script setup lang="ts">
 import { ref, watch, reactive } from 'vue'
-import type { DebugData, ScoreData, ScoringConfig } from '../types'
+import type { DebugData, ScoreData, ScoringConfig, DiagnosticSnapshotData } from '../types'
 
 import { config } from '../config'
 const API_BASE = config.apiBase
@@ -171,7 +239,16 @@ const props = defineProps<{
   debug: DebugData | null
   score: ScoreData
   phase: string
+  diagnosticSnapshot?: DiagnosticSnapshotData | null
 }>()
+
+const diag = ref<DiagnosticSnapshotData | null>(null)
+const showDiagDetail = ref(false)
+
+// Watch for diagnostic snapshot from parent
+watch(() => props.diagnosticSnapshot, (val) => {
+  if (val) diag.value = val
+})
 
 // ---- Parameter tuning state ----
 const tuning = reactive<ScoringConfig>({
@@ -274,5 +351,32 @@ function barColor(val: number): string {
   if ((val >= 80 && val <= 105) || (val >= 155 && val <= 180)) return 'bg-emerald-500/70'
   if ((val >= 70 && val <= 115) || (val >= 145 && val <= 185)) return 'bg-amber-500/60'
   return 'bg-red-500/50'
+}
+
+// ---- Diagnostic snapshot helpers ----
+function diagDimColor(text: string): string {
+  if (!text) return 'text-gray-500'
+  if (text.includes('均衡') || text.includes('无明显短板')) return 'text-emerald-400'
+  if (text.includes('严重不足') || text.includes('基础动作模式')) return 'text-red-400'
+  if (text.includes('明显偏低') || text.includes('重点改进')) return 'text-amber-400'
+  return 'text-gray-300'
+}
+
+function trendColor(direction: string): string {
+  if (direction === '改善中') return 'text-emerald-400'
+  if (direction === '恶化中') return 'text-red-400'
+  return 'text-gray-400'
+}
+
+function stabilityBarColor(stability: string): string {
+  if (stability === '稳定') return 'bg-emerald-500'
+  if (stability === '轻微波动') return 'bg-amber-500'
+  return 'bg-red-500'
+}
+
+function stabilityTextColor(stability: string): string {
+  if (stability === '稳定') return 'text-emerald-400'
+  if (stability === '轻微波动') return 'text-amber-400'
+  return 'text-red-400'
 }
 </script>

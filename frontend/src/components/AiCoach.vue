@@ -98,6 +98,13 @@
           <div class="text-[9px] text-steel whitespace-pre-wrap">{{ msg.diagnosis.raw_diagnosis }}</div>
         </div>
       </div>
+      <!-- Generating / streaming indicator -->
+      <div v-if="streaming" class="flex items-center gap-1.5 px-3 py-1.5">
+        <span v-if="!streamText" class="generating-dot" />
+        <span v-if="!streamText" class="generating-dot" style="animation-delay: 0.15s" />
+        <span v-if="!streamText" class="generating-dot" style="animation-delay: 0.3s" />
+        <span class="text-[9px] text-accent generating-text">{{ streamText ? '' : 'generating...' }}</span>
+      </div>
     </div>
     <div class="flex gap-1.5 mt-2">
       <input v-model="input" @keyup.enter="send"
@@ -163,6 +170,9 @@ watch(() => props.coachMessage, (msg) => {
   }
 })
 
+const streaming = ref(false)
+const streamText = ref('')
+
 async function send() {
   const text = input.value.trim()
   if (!text) return
@@ -171,36 +181,61 @@ async function send() {
   await nextTick()
   scrollToBottom()
 
-  // Build request body — include pose_context when available
-  const body: Record<string, unknown> = { message: text }
-  if (props.poseContext) {
-    body.pose_context = JSON.stringify(props.poseContext)
-  }
+  streaming.value = true
+  streamText.value = ''
+  const aiMsg = { role: 'ai' as const, text: '', diagnosis: null as DiagnosisData | null, recommendedCues: null as RecommendedCue[] | null, showDiagnosis: false }
+  const msgIdx = messages.value.length
+  messages.value.push(aiMsg)
 
   try {
+    const body: Record<string, unknown> = { message: text, stream: true }
+    if (props.poseContext) body.pose_context = JSON.stringify(props.poseContext)
+
     const res = await fetch(config.endpoints.chat, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    const data = await res.json()
 
-    // Extract reply (try multiple fields for backward compat)
-    const reply = data.reply || data.response || data.guidance_text || data.error || '暂无回复'
+    const ct = res.headers.get('content-type') || ''
+    if (ct.includes('text/event-stream')) {
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
 
-    // Extract diagnosis and cues from the new two-stage output format
-    const diagnosis: DiagnosisData | null = data.diagnosis || null
-    const recommendedCues: RecommendedCue[] | null = data.recommended_cues || null
-
-    messages.value.push({
-      role: 'ai',
-      text: reply,
-      diagnosis,
-      recommendedCues,
-      showDiagnosis: false,
-    })
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const data = JSON.parse(line.slice(6))
+            if (data.done) {
+              messages.value[msgIdx].text = streamText.value
+              streamText.value = ''
+              streaming.value = false
+            } else if (data.text) {
+              streamText.value += data.text
+              messages.value[msgIdx].text = streamText.value
+            }
+          } catch { /* skip */ }
+        }
+      }
+    } else {
+      const data = await res.json()
+      messages.value[msgIdx].text = data.reply || data.response || data.guidance_text || data.error || '暂无回复'
+      messages.value[msgIdx].diagnosis = (data.diagnosis || null) as DiagnosisData | null
+      messages.value[msgIdx].recommendedCues = (data.recommended_cues || null) as RecommendedCue[] | null
+      streamText.value = ''
+      streaming.value = false
+    }
   } catch {
-    messages.value.push({ role: 'ai', text: '连接失败，请检查后端服务是否启动。' })
+    messages.value[msgIdx].text = streamText.value || '连接失败，请检查后端服务。'
+    streamText.value = ''
+    streaming.value = false
   }
   await nextTick()
   scrollToBottom()
@@ -215,5 +250,21 @@ function scrollToBottom() {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+.generating-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent, #38D6B2);
+  animation: float-dot 0.9s ease-in-out infinite;
+}
+@keyframes float-dot {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-4px); }
+}
+.generating-text {
+  animation: float-text 1.2s ease-in-out infinite;
+}
+@keyframes float-text {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 </style>

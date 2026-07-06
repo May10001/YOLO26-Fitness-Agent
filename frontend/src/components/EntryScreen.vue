@@ -6,8 +6,8 @@
         <img v-if="navOnDark" src="/assets/logo.png" alt="ForMAI" class="entry-nav-logo" />
         <span class="entry-nav-mark font-display">ForMAI</span>
       </div>
-      <button class="entry-nav-cta" type="button" @click="onEnter">
-        进入训练 <span class="arrow">↗</span>
+      <button class="nav-liquid-btn" type="button" @click="onEnter">
+        <span class="nav-liquid-btn-inner">进入训练 <span class="arrow">↗</span></span>
       </button>
     </header>
 
@@ -165,13 +165,26 @@
       <div class="sec-inner cta-inner">
         <div class="cta-eyebrow reveal">准备好了吗</div>
         <h2 class="cta-title font-display reveal">开始训练</h2>
-        <button class="cta-btn reveal" type="button" @click="onEnter">
-          进入训练 <span class="arrow">→</span>
+        <button class="liquid-btn reveal" type="button" @click="onEnter">
+          <span class="liquid-btn-inner">进入训练 <span class="arrow">→</span></span>
         </button>
         <div class="cta-foot reveal">授权摄像头 · 选择动作 · 即刻开始</div>
       </div>
     </section>
   </div>
+
+  <!-- Hidden SVG filter for liquid glass effect -->
+  <svg class="hidden">
+    <defs>
+      <filter id="liquid-glass" x="0%" y="0%" width="100%" height="100%" colorInterpolationFilters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.04 0.04" numOctaves="1" seed="1" result="turbulence" />
+        <feGaussianBlur in="turbulence" stdDeviation="2" result="blurredNoise" />
+        <feDisplacementMap in="SourceGraphic" in2="blurredNoise" scale="40" xChannelSelector="R" yChannelSelector="B" result="displaced" />
+        <feGaussianBlur in="displaced" stdDeviation="3" result="finalBlur" />
+        <feComposite in="finalBlur" in2="finalBlur" operator="over" />
+      </filter>
+    </defs>
+  </svg>
 </template>
 
 <script setup lang="ts">
@@ -280,6 +293,38 @@ onUnmounted(() => {
 .entry-nav-cta .arrow { transition: transform .3s cubic-bezier(.16,1,.3,1); }
 .entry-nav-cta:hover .arrow { transform: translate(2px,-2px); }
 
+/* Nav liquid button (smaller) */
+.nav-liquid-btn {
+  cursor: pointer; position: relative; display: inline-flex; align-items: center; gap: .4em;
+  border: none; border-radius: 28px; padding: 2px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.3), rgba(255,255,255,0.06));
+  box-shadow: 0 2px 12px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.4);
+  color: inherit; font-family: 'Inter', sans-serif; font-weight: 500; font-size: 14px;
+  transition: all .3s cubic-bezier(.16,1,.3,1);
+  backdrop-filter: blur(6px);
+}
+.nav-liquid-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.55);
+}
+.nav-liquid-btn:active { transform: scale(0.96); }
+.nav-liquid-btn::before {
+  content: ''; position: absolute; inset: 2px; border-radius: 26px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.04));
+  pointer-events: none;
+}
+.nav-liquid-btn-inner {
+  display: inline-flex; align-items: center; gap: .4em;
+  background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0.2));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #111;
+  border-radius: 26px; padding: 8px 20px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+}
+.nav-liquid-btn .arrow { transition: transform .3s cubic-bezier(.16,1,.3,1); }
+.nav-liquid-btn:hover .arrow { transform: translate(2px,-2px); }
+
 /* ---- Section shells ---- */
 .sec {
   min-height: 100vh; scroll-snap-align: start;
@@ -369,6 +414,46 @@ onUnmounted(() => {
 .cta-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
 .cta-eyebrow { font-size: 13px; letter-spacing: .28em; text-transform: uppercase; color: #707072; margin-bottom: 24px; }
 .cta-title { font-weight: 600; font-size: clamp(3.2rem, 11vw, 9rem); line-height: 1; text-transform: uppercase; margin: 0 0 clamp(40px, 6vw, 64px); }
+/* ---- Liquid glass button ---- */
+.liquid-btn {
+  cursor: pointer; position: relative; display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 40px; padding: 3px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.08));
+  box-shadow:
+    0 4px 24px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(0,0,0,0.08);
+  font-family: 'Inter', sans-serif; font-weight: 600;
+  font-size: clamp(17px, 2.2vw, 22px);
+  transition: all .35s cubic-bezier(.16,1,.3,1);
+  backdrop-filter: url('#liquid-glass');
+  -webkit-backdrop-filter: blur(8px);
+}
+.liquid-btn:hover {
+  transform: scale(1.04);
+  box-shadow:
+    0 8px 36px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.10),
+    inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -1px 0 rgba(0,0,0,0.06);
+}
+.liquid-btn:active {
+  transform: scale(0.97);
+  box-shadow:
+    0 1px 4px rgba(0,0,0,0.12),
+    inset 0 2px 4px rgba(0,0,0,0.10);
+}
+.liquid-btn-inner {
+  display: inline-flex; align-items: center; gap: .5em;
+  background: linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.25));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #111; border-radius: 36px;
+  padding: 20px 52px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+}
+.liquid-btn .arrow { transition: transform .3s cubic-bezier(.16,1,.3,1); }
+.liquid-btn:hover .arrow { transform: translateX(6px); }
+.cta-foot { margin-top: 32px; font-size: 13px; letter-spacing: .06em; color: #9e9ea0; }
+
+/* Legacy CTA kept for compatibility */
 .cta-btn {
   cursor: pointer; display: inline-flex; align-items: center; gap: .5em;
   background: #111; color: #fff; border: 1px solid #111; border-radius: 30px;

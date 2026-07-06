@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-2xl overflow-hidden relative bg-[#0a0a0a] border border-white/10 transition-all duration-500">
+  <div class="rounded-2xl overflow-hidden relative bg-[#e8e8ec] border border-white/10 transition-all duration-500">
     <video ref="videoEl" class="absolute inset-0 w-full h-full object-cover" muted playsinline />
 
     <!-- Skeleton overlay: hidden by default; errors-only when errors present; full when debug on -->

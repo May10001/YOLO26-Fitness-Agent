@@ -3,59 +3,59 @@
 @tailwind utilities;
 
 :root {
-  /* Background system (deep blue-black) */
-  --bg-deepest: #05080C;
-  --bg-deep: #071018;
-  --bg-mid: #0A151D;
-  --bg-card: #11171E;
-  --bg-card-alt: #141A22;
-  --bg-metric: #0C1116;
+  /* Light glass palette */
+  --bg-deepest: #f0f1f4;
+  --bg-deep: #f5f5f7;
+  --bg-mid: #fafafa;
+  --bg-card: #ffffff;
+  --bg-card-alt: #f8f8fa;
+  --bg-metric: #f3f4f6;
 
-  /* Primary accent: teal-green */
+  /* Primary accent: teal */
   --accent: #38D6B2;
   --accent-light: #4CE0B3;
   --accent-soft: #7CE5D2;
   --accent-bright: #2BE1BC;
 
   /* Secondary accents */
-  --blue: #6DB4FF;
+  --blue: #3b82f6;
   --rose: #E05C7B;
-  --green: #7DD67A;
-  --amber: #F2AA4C;
-  --purple: #B78CFF;
-  --orange: #FF8D5C;
+  --green: #22c55e;
+  --amber: #f59e0b;
+  --purple: #8b5cf6;
+  --orange: #f97316;
 
   /* Text hierarchy */
-  --text-primary: #F4F7F5;
-  --text-bright: #FFFFFF;
-  --text-medium: #B7C3CD;
-  --text-muted: #8AA0AD;
-  --text-disabled: #65727E;
-  --text-faint: #4A5568;
+  --text-primary: #111111;
+  --text-bright: #000000;
+  --text-medium: #555555;
+  --text-muted: #888888;
+  --text-disabled: #aaaaaa;
+  --text-faint: #bbbbbb;
 
   /* Border colors */
-  --border-subtle: #1E2832;
-  --border-medium: #24303A;
-  --border-accent-tint: #153A49;
-  --border-accent: #174353;
-  --border-strong: #2A3541;
+  --border-subtle: #e5e5e7;
+  --border-medium: #d4d4d8;
+  --border-accent-tint: #c8e6e0;
+  --border-accent: #38D6B2;
+  --border-strong: #c0c0c4;
 
   /* Functional */
-  --success: #38D6B2;
-  --danger: #E05C7B;
-  --warning: #F2AA4C;
-  --info: #6DB4FF;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --info: #3b82f6;
 
-  /* Legacy compat aliases */
+  /* Legacy compat */
   --flame: #38D6B2;
-  --obsidian: #F4F7F5;
-  --paper: #11171E;
-  --concrete: #24303A;
-  --mist: #0A151D;
-  --steel: #8AA0AD;
-  --faint: #65727E;
-  --bg: #05080C;
-  --panel: #11171E;
+  --obsidian: #111111;
+  --paper: #ffffff;
+  --concrete: #d4d4d8;
+  --mist: #f3f4f6;
+  --steel: #888888;
+  --faint: #bbbbbb;
+  --bg: #f0f1f4;
+  --panel: #ffffff;
 }
 
 body {
@@ -73,8 +73,8 @@ body {
 
 .flat-card {
   background: var(--bg-card);
-  border: 1px solid var(--border-medium);
-  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
 }
 
 .mist-card {
@@ -86,13 +86,13 @@ body {
 .glow-card {
   background: var(--bg-card);
   border: 1px solid var(--border-accent-tint);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .glow-card-strong {
   background: var(--bg-card-alt);
   border: 1px solid var(--border-accent);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 /* ============================================================
@@ -101,16 +101,16 @@ body {
 
 .pill-btn {
   background: var(--accent);
-  color: #07100E;
-  border: 1px solid var(--accent);
+  color: #fff;
+  border: none;
   border-radius: 8px;
   font-family: 'Inter', sans-serif;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   transition: background 0.25s ease;
 }
 .pill-btn:hover { background: var(--accent-light); }
-.pill-btn:disabled { background: #202932; color: var(--text-disabled); border-color: var(--border-medium); cursor: not-allowed; }
+.pill-btn:disabled { background: #d4d4d8; color: var(--text-muted); cursor: not-allowed; }
 
 .pill-btn-invert {
   background: var(--bg-card);
@@ -124,7 +124,7 @@ body {
 .pill-btn-invert:hover { border-color: var(--accent); }
 
 .pill-tag {
-  border: 1px solid var(--border-medium);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   color: var(--text-muted);
   background: transparent;
@@ -134,16 +134,16 @@ body {
 .pill-tag:hover { border-color: var(--accent); color: var(--text-primary); }
 
 .pill-tag-active {
-  background: rgba(56,214,178,0.15);
+  background: rgba(56,214,178,0.12);
   border-color: var(--accent);
-  color: var(--accent);
+  color: #1a9e80;
 }
 
 .hairline { border-color: var(--border-subtle); }
 .font-display { font-family: 'Jost', 'Inter', sans-serif; }
 
 .gradient-text {
-  background: linear-gradient(90deg, var(--accent), var(--accent-soft));
+  background: linear-gradient(90deg, #38D6B2, #1a9e80);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -155,14 +155,15 @@ body {
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 50;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(5,8,12,0.85); backdrop-filter: blur(8px);
+  background: rgba(0,0,0,0.45); backdrop-filter: blur(6px);
 }
 .modal-panel {
   background: var(--bg-card);
-  border: 1px solid var(--border-accent-tint);
-  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
   padding: 24px;
   width: 420px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.12);
 }
 .modal-wide { width: 540px; }
 .modal-header {

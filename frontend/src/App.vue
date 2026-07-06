@@ -1,5 +1,6 @@
 <template>
-  <EntryScreen v-if="showEntry" @enter="showEntry = false" />
+  <EntryScreen v-if="showEntry" @enter="showEntry = false; showLanding = true" />
+  <LandingChat v-if="showLanding" @enter="showLanding = false" />
 
   <!-- Backend health indicator (Nike monochrome) -->
   <div
@@ -16,7 +17,7 @@
   <!-- Brand logo (top-left) -->
   <img src="/assets/logo.png" alt="ForMAI" class="fixed top-3 left-3 z-40 h-7 w-auto opacity-80 hover:opacity-100 transition-opacity" />
 
-  <div class="relative z-10 h-screen w-screen p-3 flex gap-3 bg-[#05080C]">
+  <div v-if="!showEntry && !showLanding" class="relative z-10 h-screen w-screen p-3 flex gap-3 bg-[#f0f1f4]">
     <div class="flex-[2.2] flex flex-col gap-3">
       <div class="flex-[3] flex gap-3 relative">
         <VideoStage
@@ -106,25 +107,22 @@
         </button>
       </div>
 
-      <!-- Utility panel (bottom-right) -->
-      <div class="mt-auto flex items-center gap-2 px-1">
-        <!-- Sound toggle -->
-        <button @click="soundOn = !soundOn"
-                class="flex items-center gap-1 px-2 py-1 rounded-md text-[9px] border transition-colors"
-                :class="soundOn
-                  ? 'bg-accent/10 border-accent/30 text-accent'
-                  : 'bg-white/[0.02] border-white/[0.06] text-faint'"
-                :title="soundOn ? '音效已开启' : '音效已关闭'">
-          {{ soundOn ? '🔊' : '🔇' }}
-        </button>
-        <!-- FPS display -->
-        <span class="text-[9px] text-faint ml-auto" title="实时帧率">
-          {{ fps }} FPS
-        </span>
-        <!-- Session time -->
-        <span class="text-[9px] text-faint" title="训练时长">
-          {{ training.formattedTime.value }}
-        </span>
+      <!-- Mini skeleton (bottom-right) -->
+      <div class="mist-card p-2">
+        <div class="text-[8px] text-faint uppercase tracking-wider mb-1">姿态预览</div>
+        <MiniSkeleton
+          :keypoints="ws.lastResult.value?.keypoints || null"
+          :errors="ws.lastResult.value?.errors || []"
+        />
+        <div class="flex items-center gap-2 mt-1.5">
+          <button @click="soundOn = !soundOn"
+                  class="text-[9px] transition-colors"
+                  :class="soundOn ? 'text-accent' : 'text-faint'"
+                  :title="soundOn ? '音效已开启' : '音效已关闭'">
+            {{ soundOn ? '🔊' : '🔇' }}
+          </button>
+          <span class="text-[9px] text-faint ml-auto">{{ fps }} FPS · {{ training.formattedTime.value }}</span>
+        </div>
       </div>
     </div>
   </div>
@@ -227,6 +225,8 @@ import AIPlanGenerator from './components/AIPlanGenerator.vue'
 import PlanRunner from './components/PlanRunner.vue'
 import FitnessQA from './components/FitnessQA.vue'
 import CustomPlanBuilder from './components/CustomPlanBuilder.vue'
+import MiniSkeleton from './components/MiniSkeleton.vue'
+import LandingChat from './components/LandingChat.vue'
 import { useSound } from './composables/useSound'
 
 const camera = useCamera()
@@ -236,6 +236,7 @@ const sfx = useSound()
 const soundOn = ref(true)  // sound toggle
 
 const showEntry = ref(true)
+const showLanding = ref(false)
 const showDebug = ref(false)
 
 function toggleDebug() { showDebug.value = !showDebug.value }

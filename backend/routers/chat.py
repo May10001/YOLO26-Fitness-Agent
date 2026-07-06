@@ -1,8 +1,10 @@
 import sys
 import json
+import asyncio
 from pathlib import Path
 from datetime import datetime
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -22,6 +24,7 @@ _active_sessions: dict[str, dict] = {}
 class ChatRequest(BaseModel):
     message: str
     pose_context: str | None = None
+    stream: bool = False
 
 
 class ChatResponse(BaseModel):
@@ -71,6 +74,11 @@ async def chat(req: ChatRequest):
 
     # --- Path B: generic chat (no pose_context), remote API available ---
     if remote_ok:
+        if req.stream:
+            return StreamingResponse(
+                _stream_chat(config, req.message),
+                media_type="text/event-stream",
+            )
         try:
             from openai import OpenAI
             client = OpenAI(
@@ -104,6 +112,44 @@ async def chat(req: ChatRequest):
         )
 
     return ChatResponse(reply=reply)
+
+
+async def _stream_chat(config: dict, message: str):
+    """SSE streaming for generic chat."""
+    from openai import OpenAI
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def _run():
+        try:
+            client = OpenAI(
+                api_key=config["api_key"],
+                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            )
+            stream = client.chat.completions.create(
+                model=config.get("model_code", "qwen-plus"),
+                messages=[
+                    {"role": "system", "content": CHAT_SYSTEM_PROMPT},
+                    {"role": "user", "content": message},
+                ],
+                temperature=0.7,
+                max_tokens=800,
+                stream=True,
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    queue.put_nowait(json.dumps({'text': delta.content}))
+            queue.put_nowait(json.dumps({'done': True}))
+        except Exception as e:
+            queue.put_nowait(json.dumps({'error': str(e)}))
+
+    asyncio.get_event_loop().run_in_executor(None, _run)
+
+    while True:
+        data = await queue.get()
+        yield f"data: {data}\n\n"
+        if '"done": true' in data or '"error"' in data:
+            break
 
 
 @router.get("/exercises")

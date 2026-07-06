@@ -1,6 +1,6 @@
 <template>
   <Transition name="summary">
-    <div v-if="visible" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md">
+    <div v-if="visible" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-md">
       <div class="w-[520px] max-h-[90vh] overflow-y-auto bg-paper border border-concrete p-8">
         <!-- Header -->
         <div class="text-center mb-7">

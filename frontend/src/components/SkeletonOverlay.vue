@@ -25,27 +25,12 @@ const SKELETON: [number, number][] = [
   [11,12],[11,13],[13,15],[12,14],[14,16],[0,1],[0,2],[1,3],[2,4]
 ]
 
-// Map error-name keywords → COCO joint indices to highlight
-const ERROR_KEYWORD_JOINTS: { kw: string; joints: number[] }[] = [
-  { kw: '膝', joints: [13, 14] },
-  { kw: '肘', joints: [7, 8] },
-  { kw: '肩', joints: [5, 6] },
-  { kw: '腰', joints: [11, 12] },
-  { kw: '背', joints: [11, 12] },
-  { kw: '髋', joints: [11, 12] },
-  { kw: '躯干', joints: [11, 12] },
-  { kw: '摆动', joints: [11, 12] },
-  { kw: '晃动', joints: [11, 12] },
-  { kw: '后仰', joints: [11, 12] },
-  { kw: '颈', joints: [0] },
-]
-
-/** Compute the set of joint indices flagged by current errors. */
+/** Compute error joint indices: uses backend-provided joints field directly. */
 function errorJointSet(): Set<number> {
   const s = new Set<number>()
   for (const e of props.errors) {
-    for (const { kw, joints } of ERROR_KEYWORD_JOINTS) {
-      if (e.name.includes(kw)) joints.forEach(j => s.add(j))
+    if (e.joints && e.joints.length > 0) {
+      e.joints.forEach(j => s.add(j))
     }
   }
   return s

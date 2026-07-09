@@ -213,7 +213,7 @@ class DetectorService:
             "count": analysis.count,
             "hold_time": analysis.hold_time,
             "errors": [
-                {"name": e.name, "severity": e.severity, "message": e.message, "suggestion": e.suggestion}
+                {"name": e.name, "severity": e.severity, "message": e.message, "suggestion": e.suggestion, "joints": e.affected_joints}
                 for e in analysis.errors
             ],
             "guidance": guidance,

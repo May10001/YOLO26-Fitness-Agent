@@ -206,10 +206,11 @@ class ExerciseStandard:
 @dataclass
 class ErrorInfo:
     """错误动作信息."""
-    name: str                           # 错误名称
-    severity: int                       # 严重程度 1-3
-    message: str                        # 实时反馈消息
-    suggestion: str                     # 修正建议
+    name: str                                  # 错误名称
+    severity: int                              # 严重程度 1-3
+    message: str                               # 实时反馈消息
+    suggestion: str                            # 修正建议
+    affected_joints: list[int] = field(default_factory=list)  # COCO 关键点索引
 
 
 @dataclass
@@ -1095,6 +1096,7 @@ class ErrorDetector:
                     severity=2,
                     message=f"检测到{side_cn}内扣",
                     suggestion="保持膝盖与脚尖方向一致，有意识地将膝盖向外打开",
+                    affected_joints=[hip_i, knee_i, ankle_i],
                 )
         return None
 
@@ -1115,6 +1117,7 @@ class ErrorDetector:
                 severity=2,
                 message=f"躯干前倾 {angles.trunk_angle:.0f}°，疑似弓背",
                 suggestion="挺胸收腹，保持背部直立，目视前方",
+                affected_joints=[11, 12, 5, 6],
             )
         return None
 
@@ -1140,6 +1143,7 @@ class ErrorDetector:
                     severity=1,
                     message="检测到颈部过度用力",
                     suggestion="双手轻扶耳侧，下巴微收保持一拳距离，用腹部发力而非颈部",
+                    affected_joints=[0, 1, 2],
                 )
         return None
 
@@ -1156,6 +1160,7 @@ class ErrorDetector:
                 severity=1,
                 message="检测到肘部位置不当",
                 suggestion="肘部与身体保持约45°夹角，避免过度外展",
+                affected_joints=[5, 6, 7, 8],
             )
         if sh_r is not None and (sh_r > 120.0 or sh_r < 50.0):
             return ErrorInfo(
@@ -1163,6 +1168,7 @@ class ErrorDetector:
                 severity=1,
                 message="检测到肘部位置不当",
                 suggestion="肘部与身体保持约45°夹角，避免过度外展",
+                affected_joints=[5, 6, 7, 8],
             )
         return None
 
@@ -1179,6 +1185,7 @@ class ErrorDetector:
                     severity=1,
                     message="开合跳时手臂未举过头顶",
                     suggestion="跳起时手臂充分向上伸展过头顶",
+                    affected_joints=[5, 6, 7, 8, 9, 10],
                 )
         return None
 
@@ -1197,7 +1204,7 @@ class ErrorDetector:
         hip_deviation = point_to_line_distance(hip_mid, shoulder_mid, ankle_mid)
         if hip_deviation / body_length > ratio:
             return ErrorInfo(name=name, severity=2,
-                             message=f"检测到髋部下塌 (偏离 {hip_deviation/body_length*100:.0f}%)",
+                             message=f"检测到髋部下塌 (偏离 {hip_deviation/body_length*100:.0f}%, affected_joints=[5, 6, 7, 8, 9, 10])",
                              suggestion=suggestion)
         return None
 
@@ -1212,6 +1219,7 @@ class ErrorDetector:
                 severity=1,
                 message=f"躯干倾斜 {angles.trunk_angle:.0f}°，疑似借力",
                 suggestion="保持躯干稳定直立，仅用肩部发力完成侧平举",
+                affected_joints=[11, 12, 5, 6],
             )
         return None
 
@@ -1224,6 +1232,7 @@ class ErrorDetector:
                 severity=2,
                 message=f"躯干倾斜 {angles.trunk_angle:.0f}°，疑似摆动借力",
                 suggestion="收紧核心，控制身体稳定，避免借助惯性摆动",
+                affected_joints=[11, 12, 5, 6],
             )
         return None
 
@@ -1242,6 +1251,7 @@ class ErrorDetector:
                     severity=1,
                     message=f"左右髋角相差 {diff:.0f}°",
                     suggestion="均匀发力，确保双侧臀部同时抬起",
+                    affected_joints=[11, 12, 13, 14],
                 )
         return None
 
@@ -1254,6 +1264,7 @@ class ErrorDetector:
                 severity=2,
                 message=f"躯干倾斜 {angles.trunk_angle:.0f}°，疑似后仰",
                 suggestion="保持上身挺直微前倾，核心收紧，目视前方",
+                affected_joints=[11, 12, 5, 6],
             )
         return None
 
@@ -1266,6 +1277,7 @@ class ErrorDetector:
                 severity=2,
                 message=f"躯干倾斜 {angles.trunk_angle:.0f}°，疑似弓背借力",
                 suggestion="收紧核心，保持背部直立，避免过度后仰借力",
+                affected_joints=[11, 12, 5, 6],
             )
         return None
 

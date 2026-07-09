@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-2xl overflow-hidden relative bg-[#e8e8ec] border border-white/10 transition-all duration-500">
+  <div class="rounded-2xl overflow-visible relative bg-[#e8e8ec] border border-white/10 transition-all duration-500">
     <video ref="videoEl" class="absolute inset-0 w-full h-full object-cover" muted playsinline />
 
     <!-- Skeleton overlay: hidden by default; errors-only when errors present; full when debug on -->
@@ -31,7 +31,7 @@
 
     <!-- Center: guidance banner (LLM feedback — highest priority, stays center) -->
     <div v-if="guidance && isRunning"
-         class="absolute top-[42%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 transition-all duration-300 max-w-[88%] w-[420px]"
+         class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 transition-all duration-300 max-w-[92%] w-[440px]"
          :class="guidanceBannerClass">
       <div class="flex flex-col items-center gap-1.5 px-7 py-5 rounded-2xl text-center border-2 shadow-2xl"
            :class="guidanceBannerInner">

@@ -31,6 +31,7 @@ export interface ErrorData {
   severity: number
   message: string
   suggestion: string
+  joints?: number[]
 }
 
 export interface GuidanceData {

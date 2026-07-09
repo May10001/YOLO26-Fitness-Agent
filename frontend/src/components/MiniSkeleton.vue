@@ -54,17 +54,10 @@ function draw() {
   const px = (x: number) => x * scale + ox
   const py = (y: number) => y * scale + oy
 
-  const errorKeywords = ['膝', '肘', '肩', '腰', '背', '髋', '躯干', '颈']
   const errorJoints = new Set<number>()
   for (const e of props.errors) {
-    for (const kw of errorKeywords) {
-      if (e.name.includes(kw)) {
-        if (kw === '膝') { errorJoints.add(13); errorJoints.add(14) }
-        if (kw === '肘') { errorJoints.add(7); errorJoints.add(8) }
-        if (kw === '肩') { errorJoints.add(5); errorJoints.add(6) }
-        if (kw === '腰' || kw === '背' || kw === '髋' || kw === '躯干') { errorJoints.add(11); errorJoints.add(12) }
-        if (kw === '颈') errorJoints.add(0)
-      }
+    if ((e as any).joints && (e as any).joints.length > 0) {
+      (e as any).joints.forEach((j: number) => errorJoints.add(j))
     }
   }
 

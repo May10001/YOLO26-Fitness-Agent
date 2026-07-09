@@ -17,11 +17,10 @@
       <main class="landing-main">
         <div class="hero-eyebrow reveal">AI-POWERED FITNESS COACH</div>
         <h1 class="hero-title font-display reveal">
-          <span class="hero-line"><span class="hero-line-inner">你的专属</span></span>
-          <span class="hero-line"><span class="hero-line-inner">AI 健身教练</span></span>
+          What do you want<br/>to train today?
         </h1>
         <p class="hero-sub reveal">
-          描述你的训练需求，AI 为你定制个性化健身方案。
+          Describe your goal — AI will build a personalized workout plan.
         </p>
 
         <!-- Chat input -->
@@ -70,12 +69,14 @@
 
       <div ref="msgList" class="chat-msg-area">
         <div v-for="(msg, i) in chatMessages" :key="i"
-             class="chat-msg-row" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
+             class="chat-msg-row" :class="msg.role === 'user' ? 'flex-row-reverse' : ''">
+          <img v-if="msg.role === 'ai'" src="/assets/logo.png" class="chat-avatar" />
           <div class="chat-msg-bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-ai'">
             <div class="text-[13px] leading-relaxed whitespace-pre-wrap">{{ msg.text }}</div>
           </div>
         </div>
-        <div v-if="streaming && !streamText" class="chat-msg-row justify-start">
+        <div v-if="streaming && !streamText" class="chat-msg-row">
+          <img src="/assets/logo.png" class="chat-avatar" />
           <div class="bubble-ai chat-msg-bubble">
             <span class="gen-dot" /><span class="gen-dot" style="animation-delay:0.15s" /><span class="gen-dot" style="animation-delay:0.3s" />
           </div>
@@ -313,8 +314,9 @@ onMounted(() => nextTick(autoResize))
   flex: 1; overflow-y: auto; padding: 20px clamp(20px, 4vw, 48px);
   display: flex; flex-direction: column; gap: 14px;
 }
-.chat-msg-row { display: flex; }
-.chat-msg-bubble { border-radius: 16px; padding: 10px 16px; max-width: 80%; }
+.chat-msg-row { display: flex; align-items: flex-start; gap: 10px; }
+.chat-avatar { width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; margin-top: 2px; }
+.chat-msg-bubble { border-radius: 16px; padding: 10px 16px; max-width: 78%; }
 .bubble-user { background: #fff; color: #111; border-bottom-right-radius: 6px; }
 .bubble-ai { background: rgba(255,255,255,0.06); color: #e0dff0; border: 1px solid rgba(255,255,255,0.06); border-bottom-left-radius: 6px; }
 

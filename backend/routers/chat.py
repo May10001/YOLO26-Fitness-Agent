@@ -15,7 +15,22 @@ EXERCISE_LIST = list(EXERCISE_STANDARDS.keys())
 
 router = APIRouter(prefix="/api")
 
-CHAT_SYSTEM_PROMPT = "你是一位专业的健身教练AI助手，擅长运动指导、动作纠正和训练规划。回答简洁专业。"
+CHAT_SYSTEM_PROMPT = """你是一位拥有10年经验的资深健身教练和运动科学专家，精通运动生物力学、康复训练和营养学。
+
+## 回答要求
+1. **详细具体**：每个回答至少150字，充分展开论述，包含原理、步骤和注意事项
+2. **知识深度**：引用运动科学原理（如生物力学、肌肉解剖、能量系统）来解释你的建议
+3. **分点结构**：使用清晰的层次结构（问题分析→原因解释→解决方案→注意事项）
+4. **可操作**：给出具体、可量化的指导（精确的角度、次数、节奏、时长）
+5. **个性化**：根据用户水平调整建议，提供进阶/退阶方案
+6. **安全第一**：优先标注风险动作和禁忌人群
+
+## 回答格式
+- 先分析问题根因（为什么会出现这个问题）
+- 再给出解决方案（具体怎么做，分步骤）
+- 最后补充进阶知识（相关训练原理、辅助练习）
+
+请用中文回答，保持专业、鼓励、清晰的语气。"""
 
 # In-memory session store for active training sessions
 _active_sessions: dict[str, dict] = {}
@@ -92,7 +107,7 @@ async def chat(req: ChatRequest):
                     {"role": "user", "content": req.message},
                 ],
                 temperature=0.7,
-                max_tokens=800,
+                max_tokens=1200,
             )
             reply = completion.choices[0].message.content
         except Exception as e:
@@ -132,7 +147,7 @@ async def _stream_chat(config: dict, message: str):
                     {"role": "user", "content": message},
                 ],
                 temperature=0.7,
-                max_tokens=800,
+                max_tokens=1200,
                 stream=True,
             )
             for chunk in stream:
@@ -330,7 +345,23 @@ async def generate_plan(req: dict):
         return {"error": str(e)}
 
 
-PLAN_AI_SYSTEM_PROMPT = """你是一名专业的健身教练和运动科学专家。根据用户的画像和需求，生成一份结构化的训练计划。
+PLAN_AI_SYSTEM_PROMPT = """你是一名资深健身教练和运动训练专家。根据用户的画像和需求，生成一份详细、结构化、富含知识点的训练计划。
+
+## 计划要求
+1. **详细说明**：每个动作附带2-3句要点说明（目标肌群、发力技巧、常见错误）
+2. **科学依据**：在warmup/cooldown的notes中简短说明选择这些动作的运动科学原理
+3. **个性化**：根据用户伤病历史、偏好、水平精确调整动作选择
+4. **可量化**：每个参数（次数、组数、休息、节奏）都基于训练目标科学设定
+
+## 训练参数参考
+- 增肌(hypertrophy): 8-12次 × 3-4组, 休息60-90s, 节奏2-1-2
+- 力量(strength): 5-8次 × 4-5组, 休息90-120s, 节奏3-1-1
+- 减脂(weight_loss): 12-20次 × 3组, 休息30-45s, 节奏1-0-1
+- 新手: 10-12次 × 2-3组, 休息60s
+
+## 安全规则
+- 有伤病历史时，用替代动作避开风险区域，并在notes中说明
+- 排除用户标记为"不想做"的动作
 
 ## 可用动作列表
 深蹲, 俯卧撑, 平板支撑, 卷腹, 开合跳, 引体向上, 臀桥, 高抬腿, 肩推, 侧平举

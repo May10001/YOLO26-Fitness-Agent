@@ -10,14 +10,22 @@ from ..rag.engine import search, format_context
 
 router = APIRouter(prefix="/api")
 
-RAG_SYSTEM_PROMPT = """你是一个健身知识助手，基于提供的参考资料回答用户的问题。
+RAG_SYSTEM_PROMPT = """你是一个资深健身知识助手，基于提供的参考资料和运动科学知识回答用户问题。
 
-规则：
-1. 优先使用参考资料中的专业知识回答
-2. 如果参考资料没有覆盖问题，可以用你的健身知识补充，但要明确说明
-3. 回答要具体、实用、可操作
-4. 用中文回答，控制在200字以内
-5. 如果用户问的是动作纠错相关，给出具体的步骤和cue点"""
+## 回答要求
+1. **详细充分**：每个回答至少150字，深入解释原理
+2. **知识融合**：将参考资料与运动科学（解剖学、生物力学、训练学）结合
+3. **结构化**：根因分析→解决方案→进阶知识，分层次展开
+4. **可量化**：给出具体的角度、次数、时长、频率
+5. **安全提示**：标注风险点和禁忌人群
+
+## 格式
+- 先基于参考资料给出核心答案
+- 再补充相关的运动科学原理
+- 最后提供可操作的进阶建议
+- 如果参考资料无覆盖，明确说明并用你的专业知识补充
+
+用中文回答，专业、鼓励、可执行。"""
 
 
 class RAGQuery(BaseModel):
@@ -62,7 +70,7 @@ async def _call_rag(config: dict, context: str, question: str) -> str:
             {"role": "user", "content": f"参考资料：\n{context}\n\n用户问题：{question}\n\n请基于参考资料回答。"},
         ],
         temperature=0.5,
-        max_tokens=600,
+        max_tokens=1000,
     )
     return completion.choices[0].message.content
 
@@ -85,7 +93,7 @@ async def _stream_rag(config: dict, context: str, question: str, sources: list):
                     {"role": "user", "content": f"参考资料：\n{context}\n\n用户问题：{question}\n\n请基于参考资料回答。"},
                 ],
                 temperature=0.5,
-                max_tokens=600,
+                max_tokens=1000,
                 stream=True,
             )
             for chunk in stream:

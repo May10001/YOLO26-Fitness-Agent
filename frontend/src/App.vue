@@ -186,11 +186,11 @@
         </div>
         <ProfilePage ref="profilePageRef" />
         <div class="my-3 border-t border-white/6"></div>
-        <CustomPlanBuilder @start="onPlanStart; modalPlan = false" />
+        <CustomPlanBuilder @start="onPlanStart($event); modalPlan = false" />
         <div class="my-3 border-t border-white/6"></div>
         <AIPlanGenerator
           :profile="profileData"
-          @start="onPlanStart; modalPlan = false"
+          @start="onPlanStart($event); modalPlan = false"
         />
       </div>
     </div>

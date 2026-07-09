@@ -21,77 +21,52 @@
       :diagnostic-snapshot="result?.diagnostic_snapshot || null"
     />
 
-    <!-- HUD top bar -->
-    <div class="absolute top-3.5 left-6 flex gap-2 items-center z-10">
-      <span v-if="isRunning" class="px-2.5 py-1 rounded-full text-[10px] font-semibold text-paper bg-danger">REC</span>
-      <span class="px-2.5 py-1 rounded-full text-[10px] text-paper/90 bg-black/50 backdrop-blur border border-white/15">{{ exercise }}</span>
-      <span v-if="result?.phase" class="px-2.5 py-1 rounded-full text-[10px] text-paper/80 bg-black/50 backdrop-blur border border-white/15">{{ result.phase }}</span>
+    <!-- HUD top bar: compact info row -->
+    <div class="absolute top-3 left-4 right-4 flex items-center gap-2 z-10">
+      <span v-if="isRunning" class="px-2 py-0.5 rounded-full text-[9px] font-bold text-white bg-danger shrink-0">REC</span>
+      <span class="px-2 py-0.5 rounded-full text-[10px] text-white/90 bg-black/50 backdrop-blur border border-white/10 truncate">{{ exercise }}</span>
+      <span v-if="result?.phase" class="px-2 py-0.5 rounded-full text-[9px] text-white/70 bg-black/40 backdrop-blur border border-white/8 shrink-0">{{ result.phase }}</span>
+      <span class="ml-auto text-[10px] text-white/50 bg-black/30 backdrop-blur px-2 py-0.5 rounded-full">{{ formattedTime }} · {{ fps }}fps</span>
     </div>
 
-    <!-- Center: guidance banner -->
+    <!-- Center: guidance banner (LLM feedback — highest priority, stays center) -->
     <div v-if="guidance && isRunning"
-         class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 transition-all duration-300 max-w-[85%]"
+         class="absolute top-[42%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 transition-all duration-300 max-w-[88%] w-[420px]"
          :class="guidanceBannerClass">
-      <div class="flex flex-col items-center gap-1 px-6 py-4 rounded-none text-center border"
+      <div class="flex flex-col items-center gap-1.5 px-7 py-5 rounded-2xl text-center border-2 shadow-2xl"
            :class="guidanceBannerInner">
-        <span class="text-[10px] uppercase tracking-widest opacity-80">{{ guidanceTypeLabel }}</span>
-        <span class="text-lg font-semibold leading-tight">{{ guidance.text }}</span>
+        <span class="text-[11px] uppercase tracking-widest font-bold opacity-90">{{ guidanceTypeLabel }}</span>
+        <span class="text-xl font-extrabold leading-snug">{{ guidance.text }}</span>
       </div>
     </div>
 
-    <!-- Bottom: rep ring counter (green arc fill) -->
-    <div v-if="isRunning && !isHoldExercise" class="absolute bottom-16 left-1/2 -translate-x-1/2 z-10">
-      <div class="relative w-36 h-36">
-        <!-- Ring SVG -->
+    <!-- Bottom-left: compact rep ring + hold time -->
+    <div v-if="isRunning && !isHoldExercise" class="absolute bottom-4 left-4 z-10">
+      <div class="relative w-24 h-24">
         <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
-          <!-- Track -->
-          <circle cx="50" cy="50" r="42" fill="none"
-                  stroke="rgba(255,255,255,0.06)" stroke-width="5" />
-          <!-- Green fill arc -->
-          <circle v-if="targetReps > 0" cx="50" cy="50" r="42" fill="none"
-                  stroke="#38D6B2" stroke-width="5" stroke-linecap="round"
-                  :stroke-dasharray="ringCircumference"
-                  :stroke-dashoffset="ringOffset"
+          <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="6" />
+          <circle v-if="targetReps > 0" cx="50" cy="50" r="40" fill="none" stroke="#38D6B2" stroke-width="6" stroke-linecap="round"
+                  :stroke-dasharray="ringCircumference" :stroke-dashoffset="ringOffset"
                   class="rep-ring transition-all duration-500" />
-          <!-- Full ring when no target (pulsing green) -->
-          <circle v-else cx="50" cy="50" r="42" fill="none"
-                  stroke="#38D6B2" stroke-width="5" stroke-linecap="round"
-                  stroke-dasharray="264" :stroke-dashoffset="ringPulseOffset"
+          <circle v-else cx="50" cy="50" r="40" fill="none" stroke="#38D6B2" stroke-width="6" stroke-linecap="round"
+                  stroke-dasharray="251" :stroke-dashoffset="ringPulseOffset"
                   class="rep-ring transition-all duration-300" />
         </svg>
-        <!-- Center text -->
         <div class="absolute inset-0 flex flex-col items-center justify-center">
-          <div class="text-4xl font-display font-bold text-white leading-none tabular-nums">
-            {{ result?.count || 0 }}
-          </div>
-          <div v-if="targetReps > 0" class="text-[10px] text-gray-500 mt-0.5">
-            / {{ targetReps }}
-          </div>
-          <div class="text-[9px] text-gray-600 uppercase tracking-[3px] mt-0.5">REPS</div>
+          <div class="text-3xl font-display font-bold text-white leading-none tabular-nums">{{ result?.count || 0 }}</div>
+          <div v-if="targetReps > 0" class="text-[9px] text-gray-400 leading-none">/{{ targetReps }}</div>
         </div>
       </div>
     </div>
-
-    <!-- Bottom: hold time for static exercises -->
-    <div v-if="isRunning && isHoldExercise" class="absolute bottom-20 left-1/2 -translate-x-1/2 text-center z-10">
-      <div class="text-6xl font-display font-semibold text-paper leading-none tabular-nums">{{ formattedHoldTime }}</div>
-      <div class="text-[10px] text-paper/60 uppercase tracking-[4px] mt-1">HOLD</div>
+    <div v-if="isRunning && isHoldExercise" class="absolute bottom-6 left-6 text-center z-10">
+      <div class="text-4xl font-display font-semibold text-white leading-none">{{ formattedHoldTime }}</div>
+      <div class="text-[9px] text-white/50 uppercase tracking-wider mt-0.5">HOLD</div>
     </div>
 
     <!-- Bottom-right: total score -->
-    <div class="absolute bottom-6 right-6 bg-black/60 backdrop-blur border border-white/15 rounded-none px-5 py-3 text-center z-10">
-      <div class="text-6xl font-display font-semibold text-paper leading-none">{{ score.total.toFixed(0) }}</div>
-      <div class="text-[9px] text-paper/60 mt-1 uppercase tracking-[3px]">Total Score</div>
-    </div>
-
-    <!-- Bottom-left: meta info (time, FPS) -->
-    <div class="absolute bottom-6 left-6 flex gap-2 z-10">
-      <span class="px-2.5 py-1.5 rounded-none text-[11px] text-paper/80 bg-black/50 backdrop-blur border border-white/10">
-        {{ formattedTime }}
-      </span>
-      <span class="px-2.5 py-1.5 rounded-none text-[11px] text-paper/60 bg-black/50 backdrop-blur border border-white/10">
-        {{ fps }} FPS
-      </span>
+    <div class="absolute bottom-4 right-4 bg-black/60 backdrop-blur border border-white/15 rounded-xl px-4 py-2.5 text-center z-10">
+      <div class="text-4xl font-display font-extrabold gradient-text leading-none">{{ score.total.toFixed(0) }}</div>
+      <div class="text-[8px] text-white/45 mt-0.5 uppercase tracking-[2px]">Score</div>
     </div>
 
     <!-- No person detected overlay -->
@@ -188,7 +163,7 @@ const guidanceBannerInner = computed(() => {
 })
 
 // ---- Rep ring counter (green arc) ----
-const RING_RADIUS = 42
+const RING_RADIUS = 40
 const ringCircumference = computed(() => 2 * Math.PI * RING_RADIUS)
 
 const ringOffset = computed(() => {

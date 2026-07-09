@@ -985,19 +985,67 @@ class MovementScorer:
 # 5. 常见错误动作识别
 # ============================================================================
 
-class ErrorDetector:
-    """五类常见错误动作检测器."""
+# Per-exercise error priority: 'red' = always show, 'yellow' = show if persistent, 'skip' = never show
+ERROR_PRIORITY = {
+    "深蹲": {
+        "膝盖内扣": "red", "躯干前倾": "red", "背部弯曲": "red",
+        "下蹲深度不足": "yellow", "膝盖过度前移": "yellow",
+        "脚后跟离地": "yellow", "左右不平衡": "yellow",
+        "动作过快": "skip", "站起时臀部发力不足": "yellow",
+    },
+    "俯卧撑": {
+        "塌腰/拱臀": "red", "身体未呈直线": "red",
+        "肘部外展": "yellow", "下降深度不足": "yellow",
+        "头前伸": "yellow", "耸肩": "yellow", "动作过快": "skip",
+    },
+    "平板支撑": {
+        "髋部下塌": "red", "憋气": "red",
+        "臀部上抬": "yellow", "耸肩": "yellow", "头位不当": "yellow",
+    },
+    "卷腹": {
+        "颈部用力": "red", "腰部离地": "red",
+        "幅度过大": "yellow", "动作过快": "skip", "呼吸错误": "yellow",
+    },
+    "开合跳": {
+        "膝关节对位不正": "red", "缓冲不足": "yellow",
+        "手臂幅度不足": "yellow", "核心放松": "yellow",
+        "动作过快": "skip", "跳跃节奏不稳": "skip",
+    },
+    "引体向上": {
+        "肘部外展": "red", "身体摆动": "red",
+        "动作过快": "skip",
+    },
+    "臀桥": {
+        "左右不平衡": "red", "躯干前倾": "yellow",
+        "动作过快": "skip",
+    },
+    "高抬腿": {
+        "核心放松": "red", "膝关节对位不正": "red",
+        "动作过快": "skip", "跳跃节奏不稳": "skip",
+    },
+    "肩推": {
+        "背部弯曲": "red", "肘部外展": "red",
+        "动作过快": "skip", "耸肩": "yellow",
+    },
+    "侧平举": {
+        "身体摆动": "red", "耸肩": "red",
+        "动作过快": "skip", "肘部外展": "yellow",
+    },
+}
 
-    # 连续帧阈值: 避免误报
+
+class ErrorDetector:
+    """多类常见错误动作检测器, 支持每动作优先级过滤."""
+
     CONSECUTIVE_FRAMES = 5
 
     def __init__(self):
-        self._error_counter: dict[str, int] = {}  # 错误名 → 连续帧计数
+        self._error_counter: dict[str, int] = {}
 
     def detect(self, angles: JointAngles, keypoints: np.ndarray,
                confidences: Optional[np.ndarray], phase: str,
                exercise: str) -> list[ErrorInfo]:
-        """检测所有适用错误, 返回当前活跃的错误列表."""
+        """检测所有适用错误, 返回当前活跃的错误列表(过滤skip级)."""
         errors = []
         methods = {
             "深蹲":     [self._detect_knee_valgus, self._detect_back_rounding],
@@ -1018,7 +1066,11 @@ class ErrorDetector:
                 key = detector.__name__
                 self._error_counter[key] = self._error_counter.get(key, 0) + 1
                 if self._error_counter[key] >= self.CONSECUTIVE_FRAMES:
-                    errors.append(error)
+                    # Filter by exercise-specific priority
+                    priority = ERROR_PRIORITY.get(exercise, {}).get(error.name, "yellow")
+                    if priority != "skip":
+                        error.severity = 3 if priority == "red" else error.severity
+                        errors.append(error)
             else:
                 self._error_counter.pop(detector.__name__, None)
 

@@ -213,12 +213,18 @@ class ContextEngine:
                     priority=4,
                     text=f"⚠ 安全警告：{err.suggestion}",
                 )
-        if result.temporal.angular_velocity > 300:
-            return GuidanceMessage(
-                type=GuidanceType.SAFETY,
-                priority=3,
-                text="⚠ 动作速度过快，请放慢节奏，控制动作质量，避免受伤",
-            )
+        # Exercise-specific speed thresholds: fast exercises need higher limits
+        speed_limits = {"开合跳": 600, "高抬腿": 550, "肩推": 200, "侧平举": 200}
+        max_speed = speed_limits.get(self.exercise_name, 380)
+        if result.temporal.angular_velocity > max_speed:
+            # Skip speed warning for exercises where speed is normal
+            skip_speed_warning = {"开合跳", "高抬腿"}
+            if self.exercise_name not in skip_speed_warning:
+                return GuidanceMessage(
+                    type=GuidanceType.SAFETY,
+                    priority=2,
+                    text="⚠ 动作速度过快，请放慢节奏，控制动作质量，避免受伤",
+                )
         return None
 
     def _check_form_correction(self, result: AnalysisResult) -> Optional[GuidanceMessage]:

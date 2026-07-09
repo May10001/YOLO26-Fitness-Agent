@@ -227,3 +227,6 @@ lora_fitness_adapter/
 hf_cache/
 yolo26n-pose.pt
 *.pt
+train.md
+/assets
+/user_profiles
